@@ -1,0 +1,225 @@
+// Seduction Lab OS — data model
+// DB is the source of truth. UI is only a visualization layer.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  AFFILIATE
+}
+
+enum AffiliateStatus {
+  ACTIVE
+  PAUSED
+  BANNED
+}
+
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  COMPLETED
+}
+
+enum AssignmentStatus {
+  ACTIVE
+  PAUSED
+  REMOVED
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  role      Role     @default(AFFILIATE)
+  createdAt DateTime @default(now())
+
+  affiliate Affiliate?
+
+  @@index([role])
+}
+
+model Affiliate {
+  id          String          @id @default(cuid())
+  userId      String          @unique
+  displayName String
+  status      AffiliateStatus @default(ACTIVE)
+
+  user               User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  threads            Thread[]
+  trackingLinks      TrackingLink[]
+  clicks             Click[]
+  conversions        Conversion[]
+  assignments        CampaignAssignment[]
+  leaderboardEntries LeaderboardEntry[]
+
+  @@index([status])
+}
+
+model Product {
+  id          String  @id @default(cuid())
+  name        String
+  price       Decimal @db.Decimal(10, 2)
+  checkoutUrl String
+
+  campaigns     Campaign[]
+  trackingLinks TrackingLink[]
+  conversions   Conversion[]
+}
+
+model Campaign {
+  id           String         @id @default(cuid())
+  name         String
+  productId    String
+  angle        String
+  instructions String         @default("")
+  exampleHook  String         @default("")
+  exampleCTA   String         @default("")
+  status       CampaignStatus @default(DRAFT)
+  startDate    DateTime?
+  endDate      DateTime?
+
+  product            Product              @relation(fields: [productId], references: [id])
+  threads            Thread[]
+  trackingLinks      TrackingLink[]
+  clicks             Click[]
+  conversions        Conversion[]
+  assignments        CampaignAssignment[]
+  leaderboardEntries LeaderboardEntry[]
+
+  @@index([status])
+  @@index([productId])
+}
+
+model Thread {
+  id          String    @id @default(cuid())
+  affiliateId String
+  campaignId  String
+  twitterUrl  String
+  twitterId   String
+  text        String    @default("")
+  postedAt    DateTime  @default(now())
+
+  affiliate Affiliate       @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  campaign  Campaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  metrics   ThreadMetrics[]
+
+  @@unique([affiliateId, twitterId])
+  @@index([campaignId])
+  @@index([affiliateId])
+}
+
+// Metrics are append-only snapshots — one row per Apify scrape.
+// The latest row (by scrapedAt) is the current state; history powers charts.
+model ThreadMetrics {
+  id        String   @id @default(cuid())
+  threadId  String
+  views     Int      @default(0)
+  likes     Int      @default(0)
+  replies   Int      @default(0)
+  retweets  Int      @default(0)
+  quotes    Int      @default(0)
+  scrapedAt DateTime @default(now())
+
+  thread Thread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([threadId, scrapedAt(sort: Desc)])
+}
+
+model TrackingLink {
+  id             String   @id @default(cuid())
+  affiliateId    String
+  campaignId     String
+  productId      String
+  slug           String   @unique
+  destinationUrl String
+  createdAt      DateTime @default(now())
+
+  affiliate Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  campaign  Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id])
+  clicks    Click[]
+
+  @@index([affiliateId])
+  @@index([campaignId])
+}
+
+// Tracking integrity: every click stores affiliateId, campaignId, trackingLinkId.
+model Click {
+  id             String   @id @default(cuid())
+  trackingLinkId String
+  affiliateId    String
+  campaignId     String
+  ipHash         String
+  userAgent      String   @default("")
+  country        String?
+  createdAt      DateTime @default(now())
+
+  trackingLink TrackingLink @relation(fields: [trackingLinkId], references: [id], onDelete: Cascade)
+  affiliate    Affiliate    @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  campaign     Campaign     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  conversions  Conversion[]
+
+  @@index([trackingLinkId])
+  @@index([affiliateId, createdAt])
+  @@index([campaignId, createdAt])
+}
+
+// V1: revenue entered manually by admin. sourceClickId is optional attribution.
+model Conversion {
+  id            String   @id @default(cuid())
+  affiliateId   String
+  campaignId    String
+  productId     String
+  revenue       Decimal  @db.Decimal(10, 2)
+  sourceClickId String?
+  createdAt     DateTime @default(now())
+
+  affiliate   Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  campaign    Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  product     Product   @relation(fields: [productId], references: [id])
+  sourceClick Click?    @relation(fields: [sourceClickId], references: [id], onDelete: SetNull)
+
+  @@index([affiliateId, createdAt])
+  @@index([campaignId, createdAt])
+}
+
+model CampaignAssignment {
+  id          String           @id @default(cuid())
+  campaignId  String
+  affiliateId String
+  status      AssignmentStatus @default(ACTIVE)
+
+  campaign  Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  affiliate Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, affiliateId])
+  @@index([affiliateId])
+}
+
+// Cached leaderboard aggregation, recomputed by the leaderboard job.
+// campaignId = null → global leaderboard; otherwise per-campaign ranking.
+model LeaderboardEntry {
+  id          String   @id @default(cuid())
+  affiliateId String
+  campaignId  String?
+  rank        Int
+  clicks      Int      @default(0)
+  views       Int      @default(0)
+  threads     Int      @default(0)
+  revenue     Decimal  @default(0) @db.Decimal(12, 2)
+  computedAt  DateTime @default(now())
+
+  affiliate Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  campaign  Campaign? @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([affiliateId, campaignId])
+  @@index([campaignId, rank])
+}
