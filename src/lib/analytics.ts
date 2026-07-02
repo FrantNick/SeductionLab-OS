@@ -10,6 +10,31 @@ import { prisma } from "@/lib/prisma";
  * CVR  = conversions / clicks
  */
 
+/**
+ * Exact per-link conversion totals: a conversion belongs to a link when
+ * its sourceClick came through that link. Manual conversions entered
+ * without a source click are (correctly) not attributable to any link.
+ */
+export async function getConversionsByLink(
+  linkIds: string[],
+): Promise<Map<string, { count: number; revenue: number }>> {
+  const byLink = new Map<string, { count: number; revenue: number }>();
+  if (linkIds.length === 0) return byLink;
+
+  const rows = await prisma.conversion.findMany({
+    where: { sourceClick: { trackingLinkId: { in: linkIds } } },
+    select: { revenue: true, sourceClick: { select: { trackingLinkId: true } } },
+  });
+  for (const c of rows) {
+    const linkId = c.sourceClick!.trackingLinkId;
+    const cur = byLink.get(linkId) ?? { count: 0, revenue: 0 };
+    cur.count += 1;
+    cur.revenue += Number(c.revenue);
+    byLink.set(linkId, cur);
+  }
+  return byLink;
+}
+
 export type ThreadWithLatest = {
   id: string;
   affiliateId: string;
@@ -26,6 +51,15 @@ export type ThreadWithLatest = {
   retweets: number;
   quotes: number;
   scrapedAt: Date | null;
+  /** The thread's bound tracking link — null only for pre-migration threads. */
+  linkId: string | null;
+  linkSlug: string | null;
+  /** Exact: clicks on this thread's own tracking link. */
+  clicks: number;
+  /** Exact: conversions whose source click came through this thread's link. */
+  conversions: number;
+  revenue: number;
+  ctr: number;
 };
 
 export async function getThreadsWithLatestMetrics(where?: {
@@ -38,12 +72,22 @@ export async function getThreadsWithLatestMetrics(where?: {
       affiliate: { select: { displayName: true } },
       campaign: { select: { name: true } },
       metrics: { orderBy: { scrapedAt: "desc" }, take: 1 },
+      trackingLink: { select: { id: true, slug: true, _count: { select: { clicks: true } } } },
     },
     orderBy: { postedAt: "desc" },
   });
 
+  // Conversions attribute to a thread through its link's clicks
+  // (Conversion → sourceClick → TrackingLink → Thread). Manual conversions
+  // without a source click stay campaign/affiliate-level by design.
+  const linkIds = threads.flatMap((t) => (t.trackingLink ? [t.trackingLink.id] : []));
+  const convByLink = await getConversionsByLink(linkIds);
+
   return threads.map((t) => {
     const m = t.metrics[0];
+    const views = m?.views ?? 0;
+    const clicks = t.trackingLink?._count.clicks ?? 0;
+    const conv = t.trackingLink ? (convByLink.get(t.trackingLink.id) ?? null) : null;
     return {
       id: t.id,
       affiliateId: t.affiliateId,
@@ -54,12 +98,18 @@ export async function getThreadsWithLatestMetrics(where?: {
       postedAt: t.postedAt,
       affiliateName: t.affiliate.displayName,
       campaignName: t.campaign.name,
-      views: m?.views ?? 0,
+      views,
       likes: m?.likes ?? 0,
       replies: m?.replies ?? 0,
       retweets: m?.retweets ?? 0,
       quotes: m?.quotes ?? 0,
       scrapedAt: m?.scrapedAt ?? null,
+      linkId: t.trackingLink?.id ?? null,
+      linkSlug: t.trackingLink?.slug ?? null,
+      clicks,
+      conversions: conv?.count ?? 0,
+      revenue: conv?.revenue ?? 0,
+      ctr: views > 0 ? clicks / views : 0,
     };
   });
 }
@@ -218,15 +268,16 @@ export async function getGlobalStats(): Promise<GlobalStats> {
 export type RankedThread = ThreadWithLatest & {
   attributedClicks: number;
   attributedRevenue: number;
-  ctr: number;
 };
 
 /**
  * Ranks threads by views, CTR or revenue.
  *
- * Clicks and revenue are recorded per (affiliate, campaign) — not per thread —
- * so they are attributed to an affiliate's threads within a campaign
- * proportionally to each thread's share of views (evenly when views are 0).
+ * Attribution is exact: each thread is bound 1:1 to a tracking link, so
+ * its clicks are the link's clicks and its revenue is the sum of
+ * conversions traced to that link's clicks. (Threads submitted before
+ * per-thread links have no bound link and therefore rank with 0 clicks
+ * until one is linked.)
  */
 export async function getTopThreads(options: {
   by: "views" | "ctr" | "revenue";
@@ -236,48 +287,13 @@ export async function getTopThreads(options: {
 }): Promise<RankedThread[]> {
   const { by, limit = 10, affiliateId, campaignId } = options;
 
-  const [threads, clicksBy, convsBy] = await Promise.all([
-    getThreadsWithLatestMetrics({ affiliateId, campaignId }),
-    prisma.click.groupBy({
-      by: ["affiliateId", "campaignId"],
-      where: { affiliateId, campaignId },
-      _count: { _all: true },
-    }),
-    prisma.conversion.groupBy({
-      by: ["affiliateId", "campaignId"],
-      where: { affiliateId, campaignId },
-      _sum: { revenue: true },
-    }),
-  ]);
+  const threads = await getThreadsWithLatestMetrics({ affiliateId, campaignId });
 
-  const cellKey = (a: string, c: string) => `${a}:${c}`;
-  const clickMap = new Map(clicksBy.map((c) => [cellKey(c.affiliateId, c.campaignId), c._count._all]));
-  const revMap = new Map(
-    convsBy.map((c) => [cellKey(c.affiliateId, c.campaignId), Number(c._sum.revenue ?? 0)]),
-  );
-
-  const cellViews = new Map<string, { views: number; count: number }>();
-  for (const t of threads) {
-    const key = cellKey(t.affiliateId, t.campaignId);
-    const cur = cellViews.get(key) ?? { views: 0, count: 0 };
-    cur.views += t.views;
-    cur.count += 1;
-    cellViews.set(key, cur);
-  }
-
-  const ranked: RankedThread[] = threads.map((t) => {
-    const key = cellKey(t.affiliateId, t.campaignId);
-    const cell = cellViews.get(key)!;
-    const share = cell.views > 0 ? t.views / cell.views : 1 / cell.count;
-    const attributedClicks = Math.round((clickMap.get(key) ?? 0) * share);
-    const attributedRevenue = (revMap.get(key) ?? 0) * share;
-    return {
-      ...t,
-      attributedClicks,
-      attributedRevenue,
-      ctr: t.views > 0 ? attributedClicks / t.views : 0,
-    };
-  });
+  const ranked: RankedThread[] = threads.map((t) => ({
+    ...t,
+    attributedClicks: t.clicks,
+    attributedRevenue: t.revenue,
+  }));
 
   ranked.sort((a, b) => {
     if (by === "views") return b.views - a.views;

@@ -1,9 +1,11 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getLeaderboard } from "@/lib/leaderboard";
-import { getThreadsWithLatestMetrics } from "@/lib/analytics";
-import { formatMoney, formatNumber, timeAgo } from "@/lib/format";
+import { getConversionsByLink, getThreadsWithLatestMetrics } from "@/lib/analytics";
+import { fullTrackingUrl } from "@/lib/tracking";
+import { formatMoney, formatNumber, formatPercent, timeAgo } from "@/lib/format";
 import { Badge, Card, EmptyState, InternalLink, PageHeader } from "@/components/ui";
+import { CopyButton } from "@/components/copy-button";
 import {
   assignAffiliateForm,
   setAssignmentStatus,
@@ -29,7 +31,7 @@ export default async function AdminCampaignDetailPage({
   });
   if (!campaign) notFound();
 
-  const [products, unassigned, threads, leaderboard] = await Promise.all([
+  const [products, unassigned, threads, leaderboard, trackingLinks] = await Promise.all([
     prisma.product.findMany({ orderBy: { name: "asc" } }),
     prisma.affiliate.findMany({
       where: {
@@ -40,7 +42,18 @@ export default async function AdminCampaignDetailPage({
     }),
     getThreadsWithLatestMetrics({ campaignId: id }),
     getLeaderboard(id, 20),
+    prisma.trackingLink.findMany({
+      where: { campaignId: id },
+      include: {
+        affiliate: { select: { displayName: true } },
+        thread: { select: { id: true, text: true, twitterId: true } },
+        _count: { select: { clicks: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
   ]);
+  const convByLink = await getConversionsByLink(trackingLinks.map((l) => l.id));
+  const linkedCount = trackingLinks.filter((l) => l.threadId).length;
 
   const dateValue = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : "");
 
@@ -232,6 +245,69 @@ export default async function AdminCampaignDetailPage({
         )}
       </Card>
 
+      {/* Attribution chain, navigable: link → thread → clicks → conversions */}
+      <Card
+        title={`Tracking links (${trackingLinks.length} · ${linkedCount} linked · ${
+          trackingLinks.length - linkedCount
+        } unused)`}
+        className="mt-6"
+        padded={false}
+      >
+        {trackingLinks.length === 0 ? (
+          <EmptyState
+            title="No tracking links yet"
+            hint="Affiliates create one link per thread from their dashboard."
+          />
+        ) : (
+          <table className="table-base">
+            <thead>
+              <tr>
+                <th>Link</th>
+                <th>Affiliate</th>
+                <th>Thread</th>
+                <th className="text-right">Clicks</th>
+                <th className="text-right">Conversions</th>
+                <th className="text-right">Revenue</th>
+                <th className="text-right">Created</th>
+              </tr>
+            </thead>
+            <tbody>
+              {trackingLinks.map((link) => {
+                const conv = convByLink.get(link.id) ?? { count: 0, revenue: 0 };
+                return (
+                  <tr key={link.id}>
+                    <td>
+                      <div className="flex items-center gap-1.5">
+                        <code className="text-xs text-ember-text">{link.slug}</code>
+                        <CopyButton text={fullTrackingUrl(link.slug)} />
+                      </div>
+                    </td>
+                    <td className="text-zinc-400">{link.affiliate.displayName}</td>
+                    <td className="max-w-52">
+                      {link.thread ? (
+                        <InternalLink href={`/dashboard/threads/${link.thread.id}`}>
+                          {link.thread.text
+                            ? `${link.thread.text.slice(0, 40)}${link.thread.text.length > 40 ? "…" : ""}`
+                            : `Tweet ${link.thread.twitterId}`}
+                        </InternalLink>
+                      ) : (
+                        <span className="text-xs text-zinc-600">unused</span>
+                      )}
+                    </td>
+                    <td className="num text-right font-medium text-zinc-200">
+                      {formatNumber(link._count.clicks)}
+                    </td>
+                    <td className="num text-right">{formatNumber(conv.count)}</td>
+                    <td className="num text-right">{formatMoney(conv.revenue)}</td>
+                    <td className="text-right text-xs text-zinc-500">{timeAgo(link.createdAt)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </Card>
+
       <Card title="Threads in this campaign" className="mt-6" padded={false}>
         {threads.length === 0 ? (
           <EmptyState title="No threads submitted yet" />
@@ -241,9 +317,11 @@ export default async function AdminCampaignDetailPage({
               <tr>
                 <th>Thread</th>
                 <th>Affiliate</th>
+                <th>Link</th>
                 <th className="text-right">Views</th>
-                <th className="text-right">Likes</th>
-                <th className="text-right">Retweets</th>
+                <th className="text-right">Clicks</th>
+                <th className="text-right">CTR</th>
+                <th className="text-right">Revenue</th>
                 <th className="text-right">Last scraped</th>
               </tr>
             </thead>
@@ -256,9 +334,19 @@ export default async function AdminCampaignDetailPage({
                     </InternalLink>
                   </td>
                   <td className="text-zinc-400">{t.affiliateName}</td>
+                  <td>
+                    {t.linkSlug ? (
+                      <code className="text-xs text-ember-text">{t.linkSlug}</code>
+                    ) : (
+                      <span className="text-xs text-zinc-600">not linked</span>
+                    )}
+                  </td>
                   <td className="num text-right">{formatNumber(t.views)}</td>
-                  <td className="num text-right">{formatNumber(t.likes)}</td>
-                  <td className="num text-right">{formatNumber(t.retweets)}</td>
+                  <td className="num text-right font-medium text-zinc-200">
+                    {formatNumber(t.clicks)}
+                  </td>
+                  <td className="num text-right">{formatPercent(t.ctr)}</td>
+                  <td className="num text-right">{formatMoney(t.revenue)}</td>
                   <td className="text-right text-xs text-zinc-500">{timeAgo(t.scrapedAt)}</td>
                 </tr>
               ))}

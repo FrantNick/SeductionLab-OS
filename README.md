@@ -53,21 +53,26 @@ Set `SEED_DEMO_DATA="false"` to seed only the admin account.
 Admin creates Product ──► Campaign (angle, instructions, hook/CTA)
                               │ assigns
 Affiliate ◄───────────────────┘
-   │ POST /api/tracking/generate  ──► TrackingLink (/go/{slug})
-   │ posts thread on X
-   │ POST /api/threads            ──► Thread ──► Apify ──► ThreadMetrics (snapshots)
-Visitor clicks /go/{slug}         ──► Click (ipHash, UA, country, full attribution)
-Admin POST /api/conversions/manual──► Conversion (revenue, V1 manual)
-Cron every 10 min                 ──► LeaderboardEntry (cached rankings)
+   │ 1. POST /api/tracking/generate ──► new TrackingLink (/go/{slug}, unlimited per campaign)
+   │ 2. posts thread on X containing that link
+   │ 3. POST /api/threads {campaign, tweet URL, tracking link}
+   │        ──► Thread ◄──1:1──► TrackingLink (bound permanently)
+   │        ──► Apify ──► ThreadMetrics (append-only snapshots)
+Visitor clicks /go/{slug}          ──► Click ──► TrackingLink ──► Thread ──► Campaign
+Admin POST /api/conversions/manual ──► Conversion (revenue, sourceClickId optional)
+Cron every 10 min                  ──► LeaderboardEntry (cached rankings)
 ```
 
-Separation of concerns is strict: threads (content), metrics (Apify),
-clicks (tracking) and conversions (sales) are independent tables — the DB is
-the source of truth and the UI only visualizes it.
+**Attribution is exact.** Each thread is bound to exactly one tracking link
+(unique constraint), so every click belongs to exactly one thread — no
+estimation. A conversion attributes to a thread when its `sourceClickId`
+points at a click from that thread's link. Separation of concerns is strict:
+threads (content), metrics (Apify), clicks (tracking) and conversions (sales)
+are independent tables — the DB is the source of truth and the UI only
+visualizes it.
 
-**Analytics definitions:** CTR = clicks ÷ views · CVR = conversions ÷ clicks.
-Clicks/revenue are recorded per (affiliate, campaign); for per-thread rankings
-they are attributed proportionally to each thread's share of views.
+**Analytics definitions:** CTR = clicks ÷ views · CVR = conversions ÷ clicks —
+computed per thread from its own link's clicks.
 
 ## Routes
 
@@ -80,9 +85,14 @@ they are attributed proportionally to each thread's share of views.
 ### Affiliate (`/dashboard`)
 - Overview: period stats (today/yesterday/7d/30d), charts, notifications,
   assigned campaigns, active experiments, best threads, leaderboard + own rank.
-- Campaigns: assigned campaigns with angle/playbook + tracking-link generator.
-- Threads: submit thread URL, metrics table, thread detail with snapshot charts.
-- Tracking links: all links with click counts. Leaderboard: global +
+- Campaigns: assigned campaigns with angle/playbook, per-campaign link counts
+  (total/linked/unused) and one-click link creation.
+- Threads: submit a posted thread with the tracking link it contains; metrics
+  table with exact per-thread clicks/CTR; detail page with link performance
+  (clicks, CTR, conversions, revenue), snapshot charts and refresh.
+- Tracking links: unlimited per campaign — one per thread. Status
+  (linked/unused), linked thread, clicks, conversions, revenue, copy,
+  delete-if-unused, search/filter/sort/pagination. Leaderboard: global +
   per-campaign with rank movement. Settings: profile, password, timezone,
   notification preferences.
 
@@ -103,9 +113,11 @@ they are attributed proportionally to each thread's share of views.
 ### API
 | Route | Auth | Purpose |
 |---|---|---|
-| `POST /api/tracking/generate` | affiliate | `{campaignId, productId?}` → `/go/{slug}` URL (idempotent per affiliate+campaign+product) |
-| `POST /api/threads` | affiliate | `{campaignId, twitterUrl}` → Thread (+ initial Apify scrape) |
-| `GET /api/threads` | affiliate | own threads with latest metrics |
+| `POST /api/tracking/generate` | affiliate | `{campaignId}` → NEW `/go/{slug}` link every call (one per planned thread) |
+| `DELETE /api/tracking/[id]` | affiliate | delete own link — only if unused (no thread, no clicks) |
+| `POST /api/threads` | affiliate | `{campaignId, twitterUrl, trackingLinkId}` → Thread bound 1:1 to the link (+ initial Apify scrape) |
+| `POST /api/threads/[id]/link` | affiliate | bind an unused link to a pre-migration thread that has none |
+| `GET /api/threads` | affiliate | own threads with latest metrics + bound link |
 | `POST /api/apify/scrape-thread` | owner/admin | `{threadId}` → new ThreadMetrics snapshot |
 | `POST /api/conversions/manual` | admin | `{affiliateId, campaignId, revenue, sourceClickId?}` |
 | `POST /api/register` | public | affiliate sign-up |
@@ -127,9 +139,20 @@ data, except a one-time compute when the cache is empty.
 `POST /api/apify/scrape-thread` and the refresh job run the
 `goat255/twitter-tweet-scraper` actor (`APIFY_ACTOR_ID`) through Apify's
 `run-sync-get-dataset-items` API and append a `ThreadMetrics` snapshot per
-scrape (metric history powers the charts). Field extraction is defensive to
-tolerate actor output variations. Without `APIFY_TOKEN` the system degrades
-gracefully — submissions still work, scraping reports "disabled".
+scrape (metric history powers the charts). The actor requires at least one
+entry in `usernames` or `tweetUrls`; the platform always scrapes one exact
+tweet, so the input payload is:
+
+```json
+{ "tweetUrls": ["https://x.com/user/status/123…"] }
+```
+
+(plus a `proxyConfiguration` block when an outbound proxy is assigned to the
+`apify` service under Admin → Proxies). Actor errors are surfaced verbatim —
+in the scrape toast, the thread-submission warning and the JobRun record —
+never swallowed into a generic failure. Field extraction from actor output is
+defensive to tolerate scraper version variations. Without a token the system
+degrades gracefully — submissions still work, scraping reports "disabled".
 
 ## Environment variables
 

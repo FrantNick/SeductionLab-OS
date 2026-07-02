@@ -1,11 +1,23 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, errorMessage } from "@/lib/api-client";
 import { useToast } from "@/components/toast";
 
-type SubmitResponse = { initialScrape: "ok" | "failed" | "disabled" };
+type SubmitResponse = {
+  initialScrape: "ok" | "failed" | "disabled";
+  scrapeError: string | null;
+};
+
+export type UnusedLink = {
+  id: string;
+  slug: string;
+  url: string;
+  campaignId: string;
+  createdAt: string | Date;
+};
 
 /** Client-side mirror of the server's tweet-permalink validation. */
 function validateTweetUrl(raw: string): string | null {
@@ -25,19 +37,36 @@ function validateTweetUrl(raw: string): string | null {
   }
 }
 
+/**
+ * Thread submission: campaign + tweet URL + the tracking link the thread
+ * promotes. Only unused links (no thread bound yet) from the selected
+ * campaign are offered; submitting binds the link permanently, which is
+ * what makes per-thread attribution exact.
+ */
 export function ThreadSubmitForm({
   campaigns,
+  unusedLinks,
 }: {
   campaigns: { id: string; name: string }[];
+  unusedLinks: UnusedLink[];
 }) {
   const router = useRouter();
   const { toast } = useToast();
   const [campaignId, setCampaignId] = useState(campaigns[0]?.id ?? "");
   const [twitterUrl, setTwitterUrl] = useState("");
+  const [trackingLinkId, setTrackingLinkId] = useState("");
   const [touched, setTouched] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const validationError = useMemo(() => validateTweetUrl(twitterUrl), [twitterUrl]);
+  const campaignLinks = useMemo(
+    () => unusedLinks.filter((l) => l.campaignId === campaignId),
+    [unusedLinks, campaignId],
+  );
+  // keep the selection valid when the campaign changes
+  const selectedLinkId = campaignLinks.some((l) => l.id === trackingLinkId)
+    ? trackingLinkId
+    : (campaignLinks[0]?.id ?? "");
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -45,18 +74,25 @@ export function ThreadSubmitForm({
       setTouched(true);
       return;
     }
+    if (!selectedLinkId) return;
     setLoading(true);
     try {
-      const data = await api.post<SubmitResponse>("/api/threads", { campaignId, twitterUrl });
+      const data = await api.post<SubmitResponse>("/api/threads", {
+        campaignId,
+        twitterUrl,
+        trackingLinkId: selectedLinkId,
+      });
       setTwitterUrl("");
+      setTrackingLinkId("");
       setTouched(false);
       if (data.initialScrape === "ok") {
-        toast({ kind: "success", title: "Thread submitted", description: "Metrics scraped." });
+        toast({ kind: "success", title: "Thread submitted", description: "Metrics scraped and link bound." });
       } else if (data.initialScrape === "failed") {
         toast({
           kind: "warning",
-          title: "Thread submitted",
-          description: "Initial scrape failed; the 6-hour job will retry.",
+          title: "Thread submitted — scrape failed",
+          description: data.scrapeError ?? "The 6-hour refresh job will retry.",
+          durationMs: 8000,
         });
       } else {
         toast({
@@ -83,22 +119,51 @@ export function ThreadSubmitForm({
 
   return (
     <form onSubmit={submit} className="space-y-4">
-      <div>
-        <label htmlFor="thread-campaign" className="mb-1.5 block text-xs font-medium text-zinc-400">
-          Campaign
-        </label>
-        <select
-          id="thread-campaign"
-          className="input"
-          value={campaignId}
-          onChange={(e) => setCampaignId(e.target.value)}
-        >
-          {campaigns.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label htmlFor="thread-campaign" className="mb-1.5 block text-xs font-medium text-zinc-400">
+            Campaign
+          </label>
+          <select
+            id="thread-campaign"
+            className="input"
+            value={campaignId}
+            onChange={(e) => setCampaignId(e.target.value)}
+          >
+            {campaigns.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label htmlFor="thread-link" className="mb-1.5 block text-xs font-medium text-zinc-400">
+            Tracking link (the one inside this thread)
+          </label>
+          {campaignLinks.length === 0 ? (
+            <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-400">
+              No unused links in this campaign —{" "}
+              <Link href="/dashboard/links" className="underline underline-offset-2">
+                create one first
+              </Link>
+              , post it in your thread, then submit here.
+            </p>
+          ) : (
+            <select
+              id="thread-link"
+              className="input"
+              value={selectedLinkId}
+              onChange={(e) => setTrackingLinkId(e.target.value)}
+            >
+              {campaignLinks.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.slug} — {l.url}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
       </div>
       <div>
         <label htmlFor="thread-url" className="mb-1.5 block text-xs font-medium text-zinc-400">
@@ -122,7 +187,7 @@ export function ThreadSubmitForm({
       <button
         type="submit"
         className="btn-primary"
-        disabled={loading || !campaignId || (touched && !!validationError)}
+        disabled={loading || !campaignId || !selectedLinkId || (touched && !!validationError)}
       >
         {loading ? "Submitting…" : "Submit thread"}
       </button>

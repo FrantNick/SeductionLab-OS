@@ -118,9 +118,10 @@ model Thread {
   text        String   @default("")
   postedAt    DateTime @default(now())
 
-  affiliate Affiliate       @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
-  campaign  Campaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  metrics   ThreadMetrics[]
+  affiliate    Affiliate       @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  campaign     Campaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  metrics      ThreadMetrics[]
+  trackingLink TrackingLink? // the one link this thread promoted (bound at submission)
 
   @@unique([affiliateId, twitterId])
   @@index([campaignId])
@@ -144,11 +145,16 @@ model ThreadMetrics {
   @@index([threadId, scrapedAt(sort: Desc)])
 }
 
+// Affiliates create unlimited links per campaign — one per thread they
+// plan to post. threadId is NULL until the affiliate submits the thread
+// that used this link; the unique constraint enforces 1 thread ↔ 1 link.
+// Clicks then attribute exactly: Click → TrackingLink → Thread.
 model TrackingLink {
   id             String   @id @default(cuid())
   affiliateId    String
   campaignId     String
   productId      String
+  threadId       String?  @unique
   slug           String   @unique
   destinationUrl String
   createdAt      DateTime @default(now())
@@ -156,6 +162,7 @@ model TrackingLink {
   affiliate Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
   campaign  Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   product   Product   @relation(fields: [productId], references: [id])
+  thread    Thread?   @relation(fields: [threadId], references: [id], onDelete: SetNull)
   clicks    Click[]
 
   @@index([affiliateId])

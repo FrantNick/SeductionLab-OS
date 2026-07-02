@@ -7,9 +7,9 @@ import { requireAdmin } from "@/lib/auth";
 import { buildDestinationUrl, generateSlug } from "@/lib/tracking";
 
 /**
- * Debug tool: generate (or fetch the existing) tracking link for any
- * affiliate × campaign pair — same semantics as the affiliate API,
- * without the self-assignment requirement.
+ * Debug tool: create a fresh tracking link for any affiliate × campaign
+ * pair — same semantics as the affiliate API (links are per-thread, so a
+ * new slug is minted every time), without the self-assignment requirement.
  */
 export async function generateTestLink(formData: FormData) {
   await requireAdmin();
@@ -22,24 +22,19 @@ export async function generateTestLink(formData: FormData) {
   });
   if (!campaign) throw new Error("Campaign not found");
 
-  const existing = await prisma.trackingLink.findFirst({
-    where: { affiliateId, campaignId, productId: campaign.productId },
-  });
-  if (!existing) {
-    const slug = generateSlug();
-    await prisma.trackingLink.create({
-      data: {
-        affiliateId,
-        campaignId,
-        productId: campaign.productId,
+  const slug = generateSlug();
+  await prisma.trackingLink.create({
+    data: {
+      affiliateId,
+      campaignId,
+      productId: campaign.productId,
+      slug,
+      destinationUrl: buildDestinationUrl(campaign.product.checkoutUrl, {
         slug,
-        destinationUrl: buildDestinationUrl(campaign.product.checkoutUrl, {
-          slug,
-          campaignId,
-          affiliateId,
-        }),
-      },
-    });
-  }
+        campaignId,
+        affiliateId,
+      }),
+    },
+  });
   revalidatePath("/admin/debug");
 }

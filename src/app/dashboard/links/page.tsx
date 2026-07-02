@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { fullTrackingUrl } from "@/lib/tracking";
+import { getConversionsByLink } from "@/lib/analytics";
 import { PageHeader } from "@/components/ui";
 import { TrackingLinksManager } from "@/components/tracking-links-manager";
 
@@ -17,41 +18,49 @@ export default async function TrackingLinksPage() {
       where: { affiliateId },
       include: {
         campaign: { select: { name: true } },
-        product: { select: { name: true } },
+        thread: { select: { id: true, text: true, twitterId: true } },
         _count: { select: { clicks: true } },
       },
       orderBy: { createdAt: "desc" },
     }),
     prisma.campaignAssignment.findMany({
       where: { affiliateId, status: "ACTIVE", campaign: { status: "ACTIVE" } },
-      include: { campaign: { include: { product: { select: { id: true, name: true } } } } },
+      include: { campaign: { select: { id: true, name: true } } },
       orderBy: { campaign: { name: "asc" } },
     }),
   ]);
+  const convByLink = await getConversionsByLink(links.map((l) => l.id));
 
   return (
     <>
       <PageHeader
         title="Tracking links"
-        subtitle="Every click through these links is logged with campaign and affiliate attribution."
+        subtitle="One link per thread — every click and sale is attributed to exactly the thread that earned it."
       />
       <TrackingLinksManager
-        links={links.map((l) => ({
-          id: l.id,
-          slug: l.slug,
-          url: fullTrackingUrl(l.slug),
-          campaignId: l.campaignId,
-          campaignName: l.campaign.name,
-          productName: l.product.name,
-          clicks: l._count.clicks,
-          createdAt: l.createdAt,
-        }))}
-        campaigns={assignments.map((a) => ({
-          id: a.campaign.id,
-          name: a.campaign.name,
-          productId: a.campaign.product.id,
-          productName: a.campaign.product.name,
-        }))}
+        links={links.map((l) => {
+          const conv = convByLink.get(l.id);
+          return {
+            id: l.id,
+            slug: l.slug,
+            url: fullTrackingUrl(l.slug),
+            campaignId: l.campaignId,
+            campaignName: l.campaign.name,
+            createdAt: l.createdAt,
+            clicks: l._count.clicks,
+            conversions: conv?.count ?? 0,
+            revenue: conv?.revenue ?? 0,
+            thread: l.thread
+              ? {
+                  id: l.thread.id,
+                  label: l.thread.text
+                    ? `${l.thread.text.slice(0, 60)}${l.thread.text.length > 60 ? "…" : ""}`
+                    : `Tweet ${l.thread.twitterId}`,
+                }
+              : null,
+          };
+        })}
+        campaigns={assignments.map((a) => ({ id: a.campaign.id, name: a.campaign.name }))}
       />
     </>
   );

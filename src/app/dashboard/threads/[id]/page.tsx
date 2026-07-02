@@ -2,10 +2,14 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { apifyEnabled } from "@/lib/apify";
-import { formatDateTime, formatNumber } from "@/lib/format";
+import { getConversionsByLink } from "@/lib/analytics";
+import { fullTrackingUrl } from "@/lib/tracking";
+import { formatDateTime, formatMoney, formatNumber, formatPercent } from "@/lib/format";
 import { Card, EmptyState, ExternalLink, PageHeader, StatCard } from "@/components/ui";
 import { EngagementLineChart, ViewsLineChart } from "@/components/charts";
 import { ScrapeButton } from "@/components/scrape-button";
+import { CopyButton } from "@/components/copy-button";
+import { LinkThreadForm } from "@/components/link-thread-form";
 
 export const dynamic = "force-dynamic";
 
@@ -24,14 +28,34 @@ export default async function ThreadDetailPage({
       campaign: { select: { name: true } },
       affiliate: { select: { id: true, displayName: true } },
       metrics: { orderBy: { scrapedAt: "asc" } },
+      trackingLink: { select: { id: true, slug: true, _count: { select: { clicks: true } } } },
     },
   });
   if (!thread) notFound();
 
   // Affiliates can only open their own threads; admins can open any.
-  if (session.user.role !== "ADMIN" && thread.affiliateId !== session.user.affiliateId) {
+  const isOwner = thread.affiliateId === session.user.affiliateId;
+  if (session.user.role !== "ADMIN" && !isOwner) {
     notFound();
   }
+
+  // Exact link performance + (for unlinked legacy threads) bind options.
+  const [convByLink, bindOptions] = await Promise.all([
+    thread.trackingLink
+      ? getConversionsByLink([thread.trackingLink.id])
+      : Promise.resolve(new Map<string, { count: number; revenue: number }>()),
+    !thread.trackingLink && isOwner
+      ? prisma.trackingLink.findMany({
+          where: { affiliateId: thread.affiliateId, campaignId: thread.campaignId, threadId: null },
+          select: { id: true, slug: true },
+          orderBy: { createdAt: "desc" },
+        })
+      : Promise.resolve([]),
+  ]);
+  const linkConv = thread.trackingLink
+    ? (convByLink.get(thread.trackingLink.id) ?? { count: 0, revenue: 0 })
+    : { count: 0, revenue: 0 };
+  const linkClicks = thread.trackingLink?._count.clicks ?? 0;
 
   const latest = thread.metrics[thread.metrics.length - 1];
   const series = thread.metrics.map((m) => ({
@@ -60,6 +84,44 @@ export default async function ThreadDetailPage({
           {formatDateTime(thread.postedAt)}
         </p>
       </Card>
+
+      {/* Exact link attribution: Click → TrackingLink → this thread */}
+      {thread.trackingLink ? (
+        <Card title="Tracking link performance" className="mt-6">
+          <div className="mb-4 flex items-center gap-2 rounded-lg border border-ink-700 bg-ink-900 px-3 py-2">
+            <code className="flex-1 truncate text-xs text-ember-text">
+              {fullTrackingUrl(thread.trackingLink.slug)}
+            </code>
+            <CopyButton text={fullTrackingUrl(thread.trackingLink.slug)} />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard label="Clicks" value={formatNumber(linkClicks)} hint="on this thread's link" />
+            <StatCard
+              label="CTR"
+              value={formatPercent((latest?.views ?? 0) > 0 ? linkClicks / latest!.views : 0)}
+              hint="clicks ÷ views"
+            />
+            <StatCard
+              label="Conversions"
+              value={formatNumber(linkConv.count)}
+              hint={`CVR ${formatPercent(linkClicks > 0 ? linkConv.count / linkClicks : 0)}`}
+            />
+            <StatCard label="Revenue" value={formatMoney(linkConv.revenue)} hint="from this link's clicks" />
+          </div>
+        </Card>
+      ) : (
+        <Card title="No tracking link bound" className="mt-6">
+          <p className="mb-3 text-sm text-zinc-400">
+            This thread predates per-thread links, so its clicks cannot be attributed exactly.
+            {isOwner && " Bind one of your unused links from this campaign:"}
+          </p>
+          {isOwner && <LinkThreadForm threadId={thread.id} options={bindOptions.map((o) => ({
+            id: o.id,
+            slug: o.slug,
+            url: fullTrackingUrl(o.slug),
+          }))} />}
+        </Card>
+      )}
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard label="Views" value={formatNumber(latest?.views ?? 0)} />

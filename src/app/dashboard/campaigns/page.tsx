@@ -2,7 +2,6 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { fullTrackingUrl } from "@/lib/tracking";
 import { getThreadsWithLatestMetrics } from "@/lib/analytics";
 import { formatDate, formatMoney, formatNumber, formatPercent } from "@/lib/format";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui";
@@ -15,17 +14,10 @@ export default async function AffiliateCampaignsPage() {
   const affiliateId = session?.user.affiliateId;
   if (!affiliateId) redirect("/dashboard");
 
-  const [assignments, clicksBy, convsBy, threads] = await Promise.all([
+  const [assignments, clicksBy, convsBy, threads, myLinks] = await Promise.all([
     prisma.campaignAssignment.findMany({
       where: { affiliateId, status: "ACTIVE" },
-      include: {
-        campaign: {
-          include: {
-            product: true,
-            trackingLinks: { where: { affiliateId }, orderBy: { createdAt: "asc" }, take: 1 },
-          },
-        },
-      },
+      include: { campaign: { include: { product: true } } },
       orderBy: { campaign: { name: "asc" } },
     }),
     prisma.click.groupBy({ by: ["campaignId"], where: { affiliateId }, _count: { _all: true } }),
@@ -35,6 +27,10 @@ export default async function AffiliateCampaignsPage() {
       _sum: { revenue: true },
     }),
     getThreadsWithLatestMetrics({ affiliateId }),
+    prisma.trackingLink.findMany({
+      where: { affiliateId },
+      select: { campaignId: true, threadId: true },
+    }),
   ]);
 
   const clickMap = new Map(clicksBy.map((c) => [c.campaignId, c._count._all]));
@@ -45,6 +41,13 @@ export default async function AffiliateCampaignsPage() {
     cur.views += t.views;
     cur.threads += 1;
     viewMap.set(t.campaignId, cur);
+  }
+  const linkMap = new Map<string, { total: number; linked: number }>();
+  for (const l of myLinks) {
+    const cur = linkMap.get(l.campaignId) ?? { total: 0, linked: 0 };
+    cur.total += 1;
+    if (l.threadId) cur.linked += 1;
+    linkMap.set(l.campaignId, cur);
   }
 
   return (
@@ -64,11 +67,12 @@ export default async function AffiliateCampaignsPage() {
       ) : (
         <div className="grid gap-6 lg:grid-cols-2">
           {assignments.map(({ campaign }) => {
-            const existing = campaign.trackingLinks[0];
             const clicks = clickMap.get(campaign.id) ?? 0;
             const revenue = revMap.get(campaign.id) ?? 0;
             const tv = viewMap.get(campaign.id) ?? { views: 0, threads: 0 };
             const ctr = tv.views > 0 ? clicks / tv.views : 0;
+            const linkStats = linkMap.get(campaign.id) ?? { total: 0, linked: 0 };
+            const unusedLinks = linkStats.total - linkStats.linked;
 
             return (
               <Card key={campaign.id} className="flex flex-col">
@@ -145,9 +149,12 @@ export default async function AffiliateCampaignsPage() {
                 <div className="mt-5 border-t border-ink-800 pt-4">
                   <div className="mb-2 flex items-center justify-between">
                     <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">
-                      Your tracking link
+                      Your tracking links
                     </p>
                     <div className="flex gap-3 text-xs">
+                      <Link href="/dashboard/links" className="text-zinc-400 hover:text-zinc-200">
+                        All links
+                      </Link>
                       <Link href="/dashboard/threads" className="text-ember-text hover:underline">
                         Submit thread
                       </Link>
@@ -156,10 +163,15 @@ export default async function AffiliateCampaignsPage() {
                       </Link>
                     </div>
                   </div>
-                  <GenerateLinkButton
-                    campaignId={campaign.id}
-                    existingUrl={existing ? fullTrackingUrl(existing.slug) : null}
-                  />
+                  <p className="mb-2 text-xs text-zinc-500">
+                    {linkStats.total} link{linkStats.total === 1 ? "" : "s"} ·{" "}
+                    {linkStats.linked} linked to threads ·{" "}
+                    <span className={unusedLinks > 0 ? "text-emerald-400" : ""}>
+                      {unusedLinks} unused
+                    </span>{" "}
+                    — create one per thread you plan to post.
+                  </p>
+                  <GenerateLinkButton campaignId={campaign.id} />
                 </div>
               </Card>
             );

@@ -29,7 +29,7 @@ export default async function AdminAnalyticsPage() {
     <>
       <PageHeader
         title="Analytics"
-        subtitle="CTR = clicks ÷ views · CVR = conversions ÷ clicks · thread clicks/revenue attributed by view share."
+        subtitle="CTR = clicks ÷ views · CVR = conversions ÷ clicks · thread clicks/revenue are exact via each thread's own tracking link."
       />
 
       <div className="grid gap-6 lg:grid-cols-2">

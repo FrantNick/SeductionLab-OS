@@ -82,13 +82,10 @@ export async function scrapeTweet(twitterUrl: string, tweetId: string): Promise<
         }
       : undefined;
 
+  // goat255/twitter-tweet-scraper input contract: it requires at least one
+  // entry in "usernames" or "tweetUrls"; we always scrape one exact tweet.
   const input = {
-    // Cover the common input shapes accepted by tweet-scraper actors.
-    tweetIDs: [tweetId],
-    tweet_ids: [tweetId],
-    urls: [twitterUrl],
-    startUrls: [{ url: twitterUrl }],
-    maxItems: 1,
+    tweetUrls: [twitterUrl],
     ...(proxyConfiguration ? { proxyConfiguration } : {}),
   };
 
@@ -101,12 +98,27 @@ export async function scrapeTweet(twitterUrl: string, tweetId: string): Promise<
 
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new ApifyError(`Apify run failed (${res.status}): ${body.slice(0, 300)}`);
+    // Apify errors are JSON: {"error":{"type":"...","message":"..."}} —
+    // surface the actor's own message so admins see the real cause.
+    let detail = body.slice(0, 300);
+    try {
+      const parsed = JSON.parse(body) as { error?: { type?: string; message?: string } };
+      if (parsed.error?.message) {
+        detail = parsed.error.type
+          ? `${parsed.error.type}: ${parsed.error.message}`
+          : parsed.error.message;
+      }
+    } catch {
+      // non-JSON body — keep the raw excerpt
+    }
+    throw new ApifyError(`Apify actor error (HTTP ${res.status}) — ${detail}`);
   }
 
   const items = (await res.json()) as Record<string, unknown>[];
   if (!Array.isArray(items) || items.length === 0) {
-    throw new ApifyError("Apify returned no items for this tweet");
+    throw new ApifyError(
+      "Apify run succeeded but returned no items — the tweet may be deleted, private, or not yet indexed",
+    );
   }
 
   // Prefer the item matching our tweet id, otherwise take the first.

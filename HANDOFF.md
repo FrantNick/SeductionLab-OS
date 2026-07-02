@@ -118,13 +118,29 @@ Conventions:
 
 ## 5. Data model (prisma/schema.prisma)
 
-**V1 core (unchanged):** `User` 1–1 `Affiliate`; `Product` → `Campaign` →
-(`Thread`, `TrackingLink`, `Click`, `Conversion`, `CampaignAssignment`,
-`LeaderboardEntry`). Every `Click` stores `trackingLinkId + affiliateId +
-campaignId` — attribution is denormalized on purpose so no join can lose it.
-`ThreadMetrics` is append-only (one row per scrape; latest = current, history
-= charts). `Conversion.sourceClickId` is the ready-made hook for webhook
-attribution.
+**Core:** `User` 1–1 `Affiliate`; `Product` → `Campaign` → (`Thread`,
+`TrackingLink`, `Click`, `Conversion`, `CampaignAssignment`,
+`LeaderboardEntry`).
+
+**Tracking links are per-thread.** An affiliate creates unlimited links inside
+a campaign — one for each thread they plan to post. `TrackingLink.threadId`
+(nullable, **unique**) binds a link to the one thread that used it:
+
+```
+Campaign ──► TrackingLink A ──1:1── Thread A ◄── Clicks on A's slug
+         ──► TrackingLink B ──1:1── Thread B ◄── Clicks on B's slug
+         ──► TrackingLink C (threadId NULL = unused, awaiting a thread)
+```
+
+The chain `Click → TrackingLink → Thread → Campaign` makes per-thread clicks,
+CTR, CVR and revenue **exact** (no view-share estimation). Every `Click` also
+stores `affiliateId + campaignId` denormalized so no join can lose
+attribution. `ThreadMetrics` is append-only (one row per scrape; latest =
+current, history = charts). A `Conversion` attributes to a thread when its
+`sourceClickId` points at a click from that thread's link; manual conversions
+without a source click stay campaign/affiliate-level. Threads created before
+this model have `threadId = NULL` links and can be bound manually from the
+thread detail page.
 
 **V2 platform:** `Notification`, `AppSetting`, `FeatureFlag`, `AuditLog`,
 `JobRun`, `AiProvider`, `AiModelConfig` (one per feature), `Prompt` +
@@ -140,8 +156,10 @@ Migrations are additive; V2 never altered V1 semantics.
 |---|---|---|
 | `GET /go/[slug]` | public | log Click (hashed IP, UA, country) → 302 to checkout |
 | `POST /api/register` | public | affiliate self-signup |
-| `POST /api/tracking/generate` | affiliate | idempotent link per affiliate×campaign×product |
-| `GET/POST /api/threads` | affiliate | list / submit threads (+ initial scrape) |
+| `POST /api/tracking/generate` | affiliate | creates a NEW link every call — one per planned thread |
+| `DELETE /api/tracking/[id]` | affiliate | delete own link, only while unused (no thread, no clicks) |
+| `GET/POST /api/threads` | affiliate | list / submit threads — POST requires `trackingLinkId` (unused, same campaign) and binds it 1:1 |
+| `POST /api/threads/[id]/link` | affiliate | bind an unused link to a legacy thread that has none |
 | `POST /api/apify/scrape-thread` | owner/admin | manual metrics refresh for one thread |
 | `POST /api/conversions/manual` | admin | manual revenue entry |
 | `GET/POST /api/notifications` | session | list / mark-all-read |
@@ -168,17 +186,27 @@ generation, plus affiliate profile/password/notification-prefs updates.
 
 ## 8. Core pipelines
 
-**Tracking:** affiliate generates link → `/go/{slug}` logs Click with salted
-SHA-256 IP hash (never raw IPs), UA, geo country header if the host provides
-it → 302 to `destinationUrl` (checkout + UTM + `ref={slug}`).
+**Tracking (three-step workflow):**
+1. Affiliate clicks *Create tracking link* inside a campaign → fresh unique
+   slug, copied to clipboard. Nothing else required at this point.
+2. Affiliate writes and posts the thread on X with that `/go/{slug}` URL in it.
+3. Affiliate submits the thread (campaign + tweet URL + tracking link, the
+   dropdown offering only their unused links from that campaign) → the link is
+   bound to the thread permanently (unique `threadId`, race-safe consume).
 
-**Threads/metrics:** affiliate submits thread URL → parsed/validated, stored
-once per (affiliate, tweet) → Apify scrape appends `ThreadMetrics` snapshots
+`/go/{slug}` logs a Click with salted SHA-256 IP hash (never raw IPs), UA and
+geo country header if the host provides it → 302 to `destinationUrl`
+(checkout + UTM + `ref={slug}`). Because the link is bound to one thread,
+each click belongs to exactly one thread.
+
+**Threads/metrics:** the submitted tweet URL is parsed/validated, stored once
+per (affiliate, tweet) → Apify scrape appends `ThreadMetrics` snapshots
 (initial + every 6 h + manual refresh). Without Apify configured the platform
 says "not configured" — it never fabricates metrics.
 
 **Revenue:** manual `Conversion` entry (admin) with full attribution;
-`sourceClickId` optional. Webhook attribution lands in V2.1 (see ROADMAP).
+`sourceClickId` links a sale to the click (and therefore thread) that earned
+it. Webhook attribution lands in V2.1 (see ROADMAP).
 
 **Leaderboards:** `computeLeaderboards()` rewrites `LeaderboardEntry` per
 scope (global + each campaign) ranked revenue → clicks → views, carrying
@@ -240,9 +268,13 @@ keep it that way.
 ## 13. Testing checklist (manual, ~10 min)
 
 1. Log in as admin → create product → create campaign (ACTIVE) → assign affiliate.
-2. Log in as affiliate → campaigns page → generate + copy tracking link.
+2. Log in as affiliate → campaigns page → *Create tracking link* twice → two
+   distinct slugs exist; links page shows both as "unused".
 3. Open `/go/{slug}` in an incognito tab → verify 302 and a new click on the dashboard.
-4. Submit a thread URL → thread stored; metrics show "scraping disabled" unless Apify configured.
+4. Threads → submit a tweet URL picking one of the unused links → thread
+   stored, link becomes "linked" (and leaves the unused dropdown); thread
+   detail shows that link's clicks/CTR exactly. Metrics show "scraping
+   disabled" unless Apify is configured.
 5. Admin → Conversions → add manual conversion → affiliate revenue updates.
 6. Admin → Overview → "Refresh leaderboards" → ranks + movement update everywhere.
 7. Admin → AI → connect provider (real key) → validate → enable `chat-assistant` + model → Chat answers with live numbers. Without a key: chat shows "not configured".
@@ -252,6 +284,9 @@ keep it that way.
 
 ## 14. Technical debt / known limitations
 
+- Threads submitted before per-thread links have no bound link and show 0
+  exact clicks until one is bound from the thread detail page (their clicks
+  still count at campaign/affiliate level).
 - `next lint` is deprecated (Next 16 removes it) — migrate to the ESLint CLI.
 - `package.json#prisma.seed` config is deprecated in Prisma 7 — move to `prisma.config.ts`.
 - Keyword-only knowledge retrieval until the embedding pipeline lands.

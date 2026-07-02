@@ -201,23 +201,8 @@ async function seedDemo() {
 
   for (const campaign of active) {
     for (const [ai, affiliate] of affiliates.entries()) {
-      // Tracking link per (affiliate, campaign)
-      const slug = `${campaign.id.slice(-4)}${ai}demo`.replace(/[^a-z0-9]/g, "").slice(0, 10);
-      const checkoutUrl =
-        campaign.productId === ebook.id ? ebook.checkoutUrl : course.checkoutUrl;
-      const link = await prisma.trackingLink.upsert({
-        where: { slug },
-        update: {},
-        create: {
-          affiliateId: affiliate.id,
-          campaignId: campaign.id,
-          productId: campaign.productId,
-          slug,
-          destinationUrl: `${checkoutUrl}?utm_source=twitter&utm_medium=affiliate&utm_campaign=${campaign.id}&utm_content=${affiliate.id}&ref=${slug}`,
-        },
-      });
-
-      // One thread per affiliate per campaign with growing metric snapshots
+      // One thread per affiliate per campaign; skipping when it exists
+      // keeps the whole block (link + clicks + conversions) idempotent.
       const twitterId = `18${(threadCount + 10).toString().padStart(8, "0")}${ai}${threadCount}`;
       const existingThread = await prisma.thread.findUnique({
         where: { affiliateId_twitterId: { affiliateId: affiliate.id, twitterId } },
@@ -235,6 +220,21 @@ async function seedDemo() {
           },
         });
         threadCount++;
+
+        // Each thread gets its own tracking link (1:1) — attribution is exact.
+        const slug = `${campaign.id.slice(-4)}${ai}demo`.replace(/[^a-z0-9]/g, "").slice(0, 10);
+        const checkoutUrl =
+          campaign.productId === ebook.id ? ebook.checkoutUrl : course.checkoutUrl;
+        const link = await prisma.trackingLink.create({
+          data: {
+            affiliateId: affiliate.id,
+            campaignId: campaign.id,
+            productId: campaign.productId,
+            threadId: thread.id,
+            slug,
+            destinationUrl: `${checkoutUrl}?utm_source=twitter&utm_medium=affiliate&utm_campaign=${campaign.id}&utm_content=${affiliate.id}&ref=${slug}`,
+          },
+        });
 
         const baseViews = 3000 + Math.floor(rand() * 30000);
         const snapshots = 4;
@@ -254,7 +254,7 @@ async function seedDemo() {
           });
         }
 
-        // Clicks over the last 10 days
+        // Clicks over the last 10 days, all through this thread's link
         const totalClicks = Math.floor(baseViews * (0.008 + rand() * 0.02));
         const clickRows = [];
         for (let i = 0; i < totalClicks; i++) {
@@ -272,17 +272,25 @@ async function seedDemo() {
         await prisma.click.createMany({ data: clickRows });
         clickCount += clickRows.length;
 
-        // Conversions: a few manual sales
+        // Conversions trace back to a real click (sourceClickId), so
+        // per-thread revenue in the demo is exact, like production webhooks.
         const sales = Math.floor(totalClicks * (0.01 + rand() * 0.03));
         const price = campaign.productId === ebook.id ? 39 : 149;
-        for (let i = 0; i < sales; i++) {
+        const sourceClicks = await prisma.click.findMany({
+          where: { trackingLinkId: link.id },
+          select: { id: true, createdAt: true },
+          take: sales,
+        });
+        for (const click of sourceClicks) {
           await prisma.conversion.create({
             data: {
               affiliateId: affiliate.id,
               campaignId: campaign.id,
               productId: productOf.get(campaign.id)!,
               revenue: price,
-              createdAt: new Date(now - Math.floor(rand() * 9 * 24) * 60 * 60 * 1000),
+              sourceClickId: click.id,
+              // bought within an hour of clicking
+              createdAt: new Date(click.createdAt.getTime() + Math.floor(rand() * 60) * 60 * 1000),
             },
           });
           conversionCount++;

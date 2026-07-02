@@ -11,8 +11,10 @@ const generateSchema = z.object({
 });
 
 /**
- * POST /api/tracking/generate — affiliate generates a tracking link
- * for a campaign they are assigned to. Returns the full /go/{slug} URL.
+ * POST /api/tracking/generate — affiliate creates a NEW tracking link for
+ * a campaign they are assigned to. Every call mints a fresh slug: links
+ * are per-thread, so an affiliate creates one before each thread they
+ * post and later binds it to the submitted thread (POST /api/threads).
  */
 export const POST = withErrorHandling(async (req: NextRequest) => {
   const { affiliateId } = await requireAffiliate();
@@ -27,24 +29,10 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
   }
 
   const campaign = assignment.campaign;
-  // The campaign's product is the default; an explicit productId must match it in V1.
+  // The campaign's product is the default; an explicit productId must match it.
   const resolvedProductId = productId ?? campaign.productId;
   if (resolvedProductId !== campaign.productId) {
     return jsonError(400, "productId does not match the campaign's product");
-  }
-
-  // Reuse an existing link for the same (affiliate, campaign, product) —
-  // one canonical link keeps click data consolidated.
-  const existing = await prisma.trackingLink.findFirst({
-    where: { affiliateId, campaignId, productId: resolvedProductId },
-    orderBy: { createdAt: "asc" },
-  });
-  if (existing) {
-    return NextResponse.json({
-      link: existing,
-      url: fullTrackingUrl(existing.slug),
-      reused: true,
-    });
   }
 
   const slug = generateSlug();
@@ -62,8 +50,5 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
     },
   });
 
-  return NextResponse.json(
-    { link, url: fullTrackingUrl(link.slug), reused: false },
-    { status: 201 },
-  );
+  return NextResponse.json({ link, url: fullTrackingUrl(link.slug) }, { status: 201 });
 });

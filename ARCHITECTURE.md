@@ -46,19 +46,33 @@ User (role: ADMIN | AFFILIATE) ──1:1── Affiliate (profile, status)
 
 ```
 Product ─┬─ Campaign ─┬─ CampaignAssignment ── Affiliate
-         │            ├─ Thread ── ThreadMetrics (append-only snapshots)
-         │            ├─ TrackingLink ── Click (ipHash, UA, country)
-         │            └─ Conversion (revenue, sourceClickId?)
+         │            ├─ TrackingLink ──1:1── Thread ── ThreadMetrics (append-only)
+         │            │        └── Click (ipHash, UA, country)
+         │            └─ Conversion (revenue, sourceClickId → Click)
          └─ Experiment ── ExperimentAssignment ── Affiliate
 ```
 
-- `Click` stores `trackingLinkId + affiliateId + campaignId` redundantly:
-  attribution survives any future link/campaign edits and needs no joins.
+- **One link per thread.** Affiliates create unlimited `TrackingLink`s inside
+  a campaign — one before each thread they post. `TrackingLink.threadId` is
+  nullable (unused link) and **unique** (a thread owns at most one link, a
+  link belongs to at most one thread). Binding happens at thread submission
+  and is race-safe (`updateMany` guarded on `threadId: null` inside the
+  creation transaction).
+- **Exact click attribution** follows the chain
+  `Click → TrackingLink → Thread → Campaign`: every click belongs to exactly
+  one thread. Thread CTR = its link's clicks ÷ its latest views; thread
+  revenue = conversions whose `sourceClick` came through its link. The
+  previous view-share estimation is gone.
+- `Click` still stores `affiliateId + campaignId` redundantly: attribution
+  survives any future link/campaign edits and needs no joins.
 - `ThreadMetrics` is append-only — the latest row is "now", the series is the
   chart. Nothing is ever overwritten, so history cannot be lost.
-- `Conversion.sourceClickId` (nullable) is the pre-built landing zone for
-  webhook-based attribution: a webhook looks up the click by `ref` slug +
-  recency and links it.
+- `Conversion.sourceClickId` (nullable) makes a sale exactly attributable to
+  a click → link → thread; webhooks will look up the click by `ref` slug +
+  recency and set it.
+- Pre-migration threads have no bound link (`threadId = NULL` on their old
+  links) and can be bound manually from the thread detail page; until then
+  they report 0 exact clicks while campaign/affiliate totals stay correct.
 - Experiments add **no new event pipes** — they scope existing clicks/
   conversions/threads to `[startDate, endDate] × cohort` at read time
   (`lib/experiments.ts`), so campaigns behave identically with or without an
@@ -67,6 +81,11 @@ Product ─┬─ Campaign ─┬─ CampaignAssignment ── Affiliate
 ## 4. Tracking pipeline (privacy-first)
 
 ```
+1. Create link   POST /api/tracking/generate → new slug (unused, threadId NULL)
+2. Post thread   affiliate puts /go/{slug} inside the thread on X
+3. Submit thread POST /api/threads {campaignId, twitterUrl, trackingLinkId}
+                 └─ transaction: create Thread + bind link (threadId ← thread.id)
+
 GET /go/{slug}
   ├─ resolve TrackingLink (slug unique)
   ├─ INSERT Click { sha256(salt + ip), userAgent, country?, full attribution }
@@ -90,10 +109,21 @@ Manual refresh (owner/admin) ─────────────────
 ```
 
 Engagement data comes only from the Apify platform API (licensed data
-provider) with credentials from the Integration store (env fallback).
-Sequential scraping avoids hammering the actor; failures degrade gracefully
-and are recorded on the `JobRun`. No scraping bypasses, no fabricated numbers:
-unconfigured = visibly disabled.
+provider) with credentials from the Integration store (env fallback). The
+`goat255/twitter-tweet-scraper` actor is invoked via
+`POST /v2/acts/{actorId}/run-sync-get-dataset-items` with the payload
+
+```json
+{ "tweetUrls": ["https://x.com/user/status/123…"] }
+```
+
+— the actor requires at least one entry in `usernames` or `tweetUrls`; the
+platform always scrapes one exact tweet. A `proxyConfiguration` block is added
+only when an outbound proxy is assigned to the `apify` service. Actor errors
+(`{"error":{"type","message"}}`) are parsed and surfaced verbatim to the UI
+and JobRun records. Sequential scraping avoids hammering the actor; failures
+degrade gracefully with per-thread error detail on the `JobRun`. No scraping
+bypasses, no fabricated numbers: unconfigured = visibly disabled.
 
 ## 6. Leaderboards (cached aggregation)
 

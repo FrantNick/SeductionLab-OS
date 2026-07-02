@@ -14,6 +14,8 @@ export type RefreshResult = {
   failed: number;
   skipped: number;
   apify: boolean;
+  /** Per-thread actor error messages (capped) so failures are diagnosable from the JobRun. */
+  errors?: { threadId: string; error: string }[];
 };
 
 /** Re-scrapes metrics for every thread of a non-draft campaign. */
@@ -28,7 +30,7 @@ export async function runMetricsRefresh(): Promise<RefreshResult> {
   });
 
   let scraped = 0;
-  let failed = 0;
+  const errors: { threadId: string; error: string }[] = [];
 
   // Sequential on purpose: avoids hammering the Apify actor with parallel runs.
   for (const thread of threads) {
@@ -37,11 +39,17 @@ export async function runMetricsRefresh(): Promise<RefreshResult> {
       scraped++;
     } catch (err) {
       console.error(`[jobs] scrape failed for thread ${thread.id}`, err);
-      failed++;
+      if (errors.length < 10) {
+        errors.push({
+          threadId: thread.id,
+          error: err instanceof Error ? err.message.slice(0, 300) : "Unknown error",
+        });
+      }
     }
   }
 
-  return { scraped, failed, skipped: 0, apify: true };
+  const failed = threads.length - scraped;
+  return { scraped, failed, skipped: 0, apify: true, ...(failed > 0 ? { errors } : {}) };
 }
 
 export async function runLeaderboardRefresh() {
