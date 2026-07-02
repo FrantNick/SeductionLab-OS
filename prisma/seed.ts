@@ -1,5 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { AI_FEATURES, DEFAULT_PROMPTS } from "../src/lib/ai/registry";
+import { FLAG_DEFS } from "../src/lib/feature-flags";
 
 const prisma = new PrismaClient();
 
@@ -15,6 +17,62 @@ async function seedAdmin() {
     create: { email: ADMIN_EMAIL.toLowerCase(), password, role: "ADMIN" },
   });
   console.log(`✓ admin: ${ADMIN_EMAIL}`);
+}
+
+/**
+ * Registers platform defaults (idempotent): feature flags, the starter
+ * prompt library and one AiModelConfig row per AI feature. No providers,
+ * keys or demo AI data — features stay honestly "not configured" until
+ * an admin connects a real provider.
+ */
+async function seedPlatform() {
+  for (const def of FLAG_DEFS) {
+    await prisma.featureFlag.upsert({
+      where: { key: def.key },
+      update: {}, // never clobber an admin's toggle
+      create: { key: def.key, name: def.name, description: def.description, enabled: def.default },
+    });
+  }
+  console.log(`✓ ${FLAG_DEFS.length} feature flags registered`);
+
+  for (const def of DEFAULT_PROMPTS) {
+    const existing = await prisma.prompt.findUnique({ where: { slug: def.slug } });
+    if (existing) continue;
+    const prompt = await prisma.prompt.create({
+      data: { slug: def.slug, name: def.name, category: def.category },
+    });
+    const version = await prisma.promptVersion.create({
+      data: {
+        promptId: prompt.id,
+        version: 1,
+        content: def.content,
+        variables: def.variables,
+        notes: "Seeded default",
+      },
+    });
+    await prisma.prompt.update({
+      where: { id: prompt.id },
+      data: { activeVersionId: version.id },
+    });
+  }
+  console.log(`✓ ${DEFAULT_PROMPTS.length} default prompts installed`);
+
+  for (const feature of AI_FEATURES) {
+    const prompt = await prisma.prompt.findUnique({
+      where: { slug: feature.defaultPromptSlug },
+      select: { id: true },
+    });
+    await prisma.aiModelConfig.upsert({
+      where: { feature: feature.feature },
+      update: {}, // keep any admin-tuned config
+      create: {
+        feature: feature.feature,
+        name: feature.name,
+        systemPromptId: prompt?.id ?? null,
+      },
+    });
+  }
+  console.log(`✓ ${AI_FEATURES.length} AI feature configs registered (disabled until a provider is connected)`);
 }
 
 async function seedDemo() {
@@ -237,6 +295,7 @@ async function seedDemo() {
 
 async function main() {
   await seedAdmin();
+  await seedPlatform();
   if (SEED_DEMO) {
     await seedDemo();
     console.log("Demo data seeded. Log in as maya@example.com / affiliate123 to see the affiliate view.");

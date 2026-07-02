@@ -1,12 +1,20 @@
-# Seduction Lab OS — V1
+# Seduction Lab OS — V2
 
 Marketing experimentation and affiliate attribution platform. Admins define
 campaigns (marketing angles) for products; affiliates post Twitter/X threads,
 drive clicks through tracked redirect links, and climb cached leaderboards.
-Revenue is entered manually in V1 (webhooks arrive in V2).
+V2 adds the platform layer: notifications, runtime settings, feature flags,
+audit logs, job tracking, experiments, integrations, proxy management and a
+provider-agnostic AI stack (providers, per-feature model configs, versioned
+prompts, knowledge base, chat). Revenue is entered manually (webhook
+attribution is next — see `ROADMAP.md`).
 
 **Stack:** Next.js App Router (TypeScript) · PostgreSQL + Prisma · Auth.js
 (credentials, JWT) · Tailwind CSS · Recharts · Apify (thread metrics).
+
+**Docs:** [HANDOFF.md](HANDOFF.md) (technical handoff) ·
+[ARCHITECTURE.md](ARCHITECTURE.md) (system design) ·
+[ROADMAP.md](ROADMAP.md) (V1.1 → V3).
 
 ---
 
@@ -70,16 +78,27 @@ they are attributed proportionally to each thread's share of views.
   creates an AFFILIATE. Admins are seeded.
 
 ### Affiliate (`/dashboard`)
-- Overview: stats, clicks chart, active campaigns, leaderboard + own rank.
+- Overview: period stats (today/yesterday/7d/30d), charts, notifications,
+  assigned campaigns, active experiments, best threads, leaderboard + own rank.
 - Campaigns: assigned campaigns with angle/playbook + tracking-link generator.
 - Threads: submit thread URL, metrics table, thread detail with snapshot charts.
-- Tracking links: all links with click counts.
+- Tracking links: all links with click counts. Leaderboard: global +
+  per-campaign with rank movement. Settings: profile, password, timezone,
+  notification preferences.
 
 ### Admin (`/admin`)
-- Overview: global analytics; Campaigns: create/edit/assign; Affiliates:
-  activate/pause/ban; Analytics: CTR & revenue per campaign, top affiliates,
-  top threads by views/CTR/revenue; Conversions: manual revenue entry;
-  Products: catalog.
+- Overview: global analytics + quick actions; Campaigns: create/edit/assign;
+  Affiliates: activate/pause/ban; Analytics: CTR & revenue per campaign, top
+  affiliates, top threads by views/CTR/revenue; Conversions: manual revenue
+  entry; Products: catalog; Leaderboard: global + per-campaign.
+- Experiments: time-bound tests over campaigns (cohort, goal, winner).
+- AI: providers (encrypted keys, live validation), per-feature model configs,
+  versioned prompts, knowledge base, chat over live platform data.
+- Integrations: Apify/Stripe/Shopify/Gumroad/LLM credentials with real
+  validation and honest status. Proxies: outbound routes, health, per-service
+  assignment. Audit log: every privileged action. Settings: branding,
+  tracking domain, defaults, feature flags, service status. Debug: job
+  triggers, cron status, env checks, DB stats, test link generator.
 
 ### API
 | Route | Auth | Purpose |

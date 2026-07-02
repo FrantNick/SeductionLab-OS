@@ -78,6 +78,14 @@ const badgeStyles: Record<string, string> = {
   REMOVED: "bg-red-500/10 text-red-400 ring-red-500/30",
   ADMIN: "bg-ember-soft text-ember-text ring-ember/30",
   AFFILIATE: "bg-zinc-500/10 text-zinc-400 ring-zinc-500/30",
+  RUNNING: "bg-emerald-500/10 text-emerald-400 ring-emerald-500/30",
+  CANCELLED: "bg-red-500/10 text-red-400 ring-red-500/30",
+  ok: "bg-emerald-500/10 text-emerald-400 ring-emerald-500/30",
+  error: "bg-red-500/10 text-red-400 ring-red-500/30",
+  unconfigured: "bg-zinc-500/10 text-zinc-400 ring-zinc-500/30",
+  healthy: "bg-emerald-500/10 text-emerald-400 ring-emerald-500/30",
+  unhealthy: "bg-red-500/10 text-red-400 ring-red-500/30",
+  unchecked: "bg-zinc-500/10 text-zinc-400 ring-zinc-500/30",
 };
 
 export function Badge({ value }: { value: string }) {
@@ -96,6 +104,23 @@ export function EmptyState({ title, hint }: { title: string; hint?: string }) {
     <div className="flex flex-col items-center justify-center px-6 py-12 text-center">
       <p className="text-sm font-medium text-zinc-400">{title}</p>
       {hint && <p className="mt-1 text-xs text-zinc-500">{hint}</p>}
+    </div>
+  );
+}
+
+/** Shown in place of a page whose feature flag is switched off. */
+export function FeatureDisabledNotice({ feature }: { feature: string }) {
+  return (
+    <div className="card">
+      <EmptyState
+        title={`${feature} is disabled`}
+        hint="An admin can enable this feature under Settings → Feature flags."
+      />
+      <div className="pb-6 text-center">
+        <Link href="/admin/settings" className="btn-secondary">
+          Open settings
+        </Link>
+      </div>
     </div>
   );
 }

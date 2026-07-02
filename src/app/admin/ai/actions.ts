@@ -191,6 +191,22 @@ export async function savePromptVersionAction(promptId: string, formData: FormDa
   revalidatePath(`/admin/ai/prompts/${promptId}`);
 }
 
+// ── Knowledge base ───────────────────────────────────────────────────
+
+/** Removes a document and (via cascade) all of its chunks. */
+export async function deleteKnowledgeDocument(documentId: string) {
+  const session = await requireAdmin();
+  const doc = await prisma.knowledgeDocument.delete({ where: { id: documentId } });
+  await logAudit({
+    userId: session.user.id,
+    action: "ai.knowledge_deleted",
+    entityType: "knowledge-document",
+    entityId: documentId,
+    metadata: { title: doc.title },
+  });
+  revalidatePath("/admin/ai/knowledge");
+}
+
 export async function activateVersionAction(promptId: string, versionId: string) {
   const session = await requireAdmin();
   await activatePromptVersion(promptId, versionId);

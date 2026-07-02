@@ -1,0 +1,188 @@
+# Seduction Lab OS — Architecture
+
+The platform is a single Next.js App Router application over PostgreSQL.
+Guiding principle: **the database is the source of truth; the UI only
+visualizes it.** Content (threads), engagement (metrics), traffic (clicks) and
+money (conversions) are independent tables joined by attribution keys — no
+pipeline can corrupt another.
+
+## 1. Request flow
+
+```
+Browser ──► middleware.ts (JWT session, role routing)
+   │
+   ├─ Server Components (pages) ──► src/lib/* ──► Prisma ──► PostgreSQL
+   │        │ render                 business logic
+   │        └─ <form action={serverAction}> ──► requireAdmin() ──► lib ──► revalidatePath
+   │
+   ├─ Client Components ──► lib/api-client.ts ──► /api/* routes
+   │   (toasts, chat, uploads)   typed fetch        │ withErrorHandling + zod
+   │                                                └──► lib ──► Prisma
+   └─ Public: /go/[slug] ──► Click insert ──► 302 redirect
+```
+
+Three mutation paths, one rule each:
+- **Server actions** (admin/affiliate CRUD): always begin with an auth guard,
+  end with `revalidatePath`.
+- **API routes** (client-interactive + machine callers): `withErrorHandling`
+  wrapper, zod validation, `jsonError` responses.
+- **Cron routes**: shared-secret gate (`isAuthorizedCron`), record a `JobRun`.
+
+## 2. Identity & authorization
+
+```
+User (role: ADMIN | AFFILIATE) ──1:1── Affiliate (profile, status)
+```
+
+- Auth.js credentials → bcrypt check → JWT carrying `{ role, affiliateId }`.
+- `middleware.ts` routes by role (affiliates never see `/admin`).
+- Every action/route re-validates via `requireSession / requireAdmin /
+  requireAffiliate` — authorization is enforced server-side at the data
+  boundary, not in the UI.
+- Privileged mutations write `AuditLog` rows through a **typed action union**
+  (`lib/audit.ts`), so unknown action strings fail the build.
+
+## 3. Attribution data model
+
+```
+Product ─┬─ Campaign ─┬─ CampaignAssignment ── Affiliate
+         │            ├─ Thread ── ThreadMetrics (append-only snapshots)
+         │            ├─ TrackingLink ── Click (ipHash, UA, country)
+         │            └─ Conversion (revenue, sourceClickId?)
+         └─ Experiment ── ExperimentAssignment ── Affiliate
+```
+
+- `Click` stores `trackingLinkId + affiliateId + campaignId` redundantly:
+  attribution survives any future link/campaign edits and needs no joins.
+- `ThreadMetrics` is append-only — the latest row is "now", the series is the
+  chart. Nothing is ever overwritten, so history cannot be lost.
+- `Conversion.sourceClickId` (nullable) is the pre-built landing zone for
+  webhook-based attribution: a webhook looks up the click by `ref` slug +
+  recency and links it.
+- Experiments add **no new event pipes** — they scope existing clicks/
+  conversions/threads to `[startDate, endDate] × cohort` at read time
+  (`lib/experiments.ts`), so campaigns behave identically with or without an
+  experiment running.
+
+## 4. Tracking pipeline (privacy-first)
+
+```
+GET /go/{slug}
+  ├─ resolve TrackingLink (slug unique)
+  ├─ INSERT Click { sha256(salt + ip), userAgent, country?, full attribution }
+  └─ 302 → checkoutUrl + utm_* + ref={slug}
+```
+
+Raw IPs are never persisted — only salted hashes (`IP_HASH_SALT`), enough for
+dedup/fraud heuristics without storing PII. Country comes from host geo
+headers when present. Click logging is fire-and-forget: a DB hiccup must not
+break the visitor's redirect.
+
+## 5. Metrics ingestion (compliant by design)
+
+```
+Thread submit ──► parse & validate URL ──► store Thread
+      │                                        │
+      └────────── initial scrape ──────────────┤
+Cron (6h) ── for each thread of active campaign┤──► Apify actor (official API)
+Manual refresh (owner/admin) ──────────────────┘        │
+                                            append ThreadMetrics snapshot
+```
+
+Engagement data comes only from the Apify platform API (licensed data
+provider) with credentials from the Integration store (env fallback).
+Sequential scraping avoids hammering the actor; failures degrade gracefully
+and are recorded on the `JobRun`. No scraping bypasses, no fabricated numbers:
+unconfigured = visibly disabled.
+
+## 6. Leaderboards (cached aggregation)
+
+```
+computeLeaderboards()               reads
+  scopes = [global, ...campaigns]   getLeaderboard(scope) ──► LeaderboardEntry
+  per scope:                           (cache only; lazy compute if empty)
+    aggregate clicks/revenue/views
+    rank: revenue → clicks → views
+    carry previousRank  ──► movement badges (▲ ▼ new)
+    transactional delete+createMany
+```
+
+Recomputed every 10 minutes by cron (and on demand from the UI). Readers
+never aggregate live data, so leaderboard pages stay O(limit).
+
+## 7. AI subsystem
+
+```
+feature key ("chat-assistant")
+   │  AiModelConfig (enabled, model, temperature, maxTokens, reasoning)
+   ├─► AiProvider (kind, baseUrl, AES-256-GCM key) ──► adapter
+   │        OPENAI_COMPATIBLE → POST {base}/chat/completions
+   │        ANTHROPIC         → POST {base}/messages
+   └─► Prompt.activeVersion (versioned, rollback = repoint)
+
+runAssistantTurn():
+  system = prompt + live platform snapshot (products, campaigns, stats,
+           leaderboard, experiments) + keyword-matched knowledge chunks
+  → provider call → persist AiMessage pair (only on success)
+```
+
+Layering is strict: **adapters** know wire formats only; **service** resolves
+configuration; **context** builds retrieval; **registry** is dependency-free
+constants (safe for client and seed imports). `AiNotConfiguredError` surfaces
+as HTTP 503 — the UI renders an honest "not configured" state and a link to
+the config screen. Knowledge documents are chunked on ingest
+(1500 chars / 200 overlap); `KnowledgeChunk.embedding` is reserved so a vector
+pipeline only fills a column behind the same `searchKnowledge()` signature.
+`AiInsight` is the write target for future analysis jobs (hook detection,
+thread grading, daily summaries) — DB and UI slots exist before the jobs do.
+
+## 8. Integrations & egress
+
+```
+INTEGRATION_DEFS (registry) ──► Integration row (credentialEncrypted, config,
+                                 status, statusDetail, lastCheckedAt)
+consumers: getIntegrationCredential(slug)  — DB first, env fallback (Apify)
+validators: live API check on save — status is measured, never assumed
+
+ProxyAssignment(service) ──► Proxy (TCP health, latency, success/failure)
+  services: "apify", "ai" — reliability & geo-routing for authorized traffic only
+```
+
+Secrets are encrypted with AES-256-GCM (`lib/crypto.ts`), never logged, never
+serialized to the client (forms show placeholders, not values).
+
+## 9. Platform services
+
+```
+FeatureFlag ──► isFlagEnabled() ──► gates nav (layout), pages, APIs
+AppSetting  ──► getSetting()    ──► branding, tracking domain, defaults
+Notification──► notify()/notifyAffiliate() ──► in-app feed (+ toasts client-side)
+AuditLog    ──► logAudit()      ──► /admin/audit (search + pagination)
+JobRun      ──► executeJob()    ──► debug panel, settings status, error feed
+```
+
+Both registries (`FLAG_DEFS`, `SETTING_DEFS`) define defaults in code and
+overlay DB rows, so a missing row can never crash a page and new deploys
+self-register their keys.
+
+## 10. Background execution
+
+```
+vercel.json cron ──► /api/cron/leaderboard      (*/10 min)
+                 ──► /api/cron/refresh-metrics  (0 */6 h)
+   auth: Bearer CRON_SECRET or ?secret=
+Admin UI ──► POST /api/admin/jobs {job|"all"}   (audited, requireAdmin)
+Local dev ──► scripts/jobs-dev.ts scheduler
+All paths ──► executeJob() ──► JobRun row (status, trigger, result, error)
+```
+
+## 11. UI system
+
+Dark, premium SaaS aesthetic via Tailwind tokens (`ink` surfaces, `ember`
+accent, `shadow-card/pop`) and CSS primitives (`.card`, `.input`,
+`.btn-primary/secondary/ghost`, `.table-base`, `.num`). Shared components:
+`PageHeader`, `Card`, `StatCard`, `Badge`, `EmptyState`,
+`FeatureDisabledNotice`, `ToggleSwitch`, `ConfirmAction` (accessible modal),
+`ToastProvider` (aria-live), `Sidebar` (sectioned nav, flag-gated), Recharts
+wrappers in `charts.tsx` with a CVD-validated palette. Every list has an
+empty state; every destructive action confirms; every async action toasts.

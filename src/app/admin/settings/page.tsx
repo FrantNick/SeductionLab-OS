@@ -6,6 +6,7 @@ import { apifyEnabled } from "@/lib/apify";
 import { trackingBaseUrl } from "@/lib/tracking";
 import { timeAgo } from "@/lib/format";
 import { Card, PageHeader } from "@/components/ui";
+import { ToggleSwitch } from "@/components/toggle-switch";
 import { saveAppSettings, toggleFeatureFlag } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -98,23 +99,11 @@ export default async function AdminSettingsPage() {
                     <p className="text-sm font-medium text-zinc-200">{flag.name}</p>
                     <p className="text-xs text-zinc-500">{flag.description}</p>
                   </div>
-                  <form action={toggleFeatureFlag.bind(null, flag.key, !flag.enabled)}>
-                    <button
-                      type="submit"
-                      role="switch"
-                      aria-checked={flag.enabled}
-                      aria-label={`Toggle ${flag.name}`}
-                      className={`relative h-6 w-11 rounded-full transition-colors ${
-                        flag.enabled ? "bg-ember" : "bg-ink-600"
-                      }`}
-                    >
-                      <span
-                        className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${
-                          flag.enabled ? "left-[22px]" : "left-0.5"
-                        }`}
-                      />
-                    </button>
-                  </form>
+                  <ToggleSwitch
+                    action={toggleFeatureFlag.bind(null, flag.key, !flag.enabled)}
+                    checked={flag.enabled}
+                    label={`Toggle ${flag.name}`}
+                  />
                 </li>
               ))}
             </ul>

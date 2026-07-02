@@ -9,7 +9,7 @@ export type AuditAction =
   | `settings.${"changed"}`
   | `flag.${"toggled"}`
   | `integration.${"configured" | "toggled"}`
-  | `ai.${"provider_configured" | "model_configured" | "prompt_created" | "prompt_activated"}`
+  | `ai.${"provider_configured" | "model_configured" | "prompt_created" | "prompt_activated" | "knowledge_deleted"}`
   | `proxy.${"created" | "updated" | "deleted" | "assigned"}`
   | `experiment.${"created" | "updated" | "status_changed"}`
   | `job.${"triggered"}`

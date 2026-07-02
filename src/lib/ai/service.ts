@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { decryptSecret } from "@/lib/crypto";
 import { chat, type ChatMessage, type ChatResult } from "@/lib/ai/adapters";
 import { buildPlatformContext, searchKnowledge } from "@/lib/ai/context";
+import { AI_FEATURES } from "@/lib/ai/registry";
 
 /**
  * Feature-level AI entry point. Resolution chain (all database-driven,
@@ -12,6 +13,23 @@ import { buildPlatformContext, searchKnowledge } from "@/lib/ai/context";
  */
 
 export class AiNotConfiguredError extends Error {}
+
+/**
+ * Guarantees an AiModelConfig row exists for every registered feature,
+ * so the admin AI page (and saveModelConfig, which updates by feature)
+ * always has a row to work with — even before the seed ran.
+ */
+export async function ensureAiFeatureConfigs(): Promise<void> {
+  const existing = await prisma.aiModelConfig.findMany({ select: { feature: true } });
+  const have = new Set(existing.map((c) => c.feature));
+  const missing = AI_FEATURES.filter((f) => !have.has(f.feature));
+  if (missing.length === 0) return;
+
+  await prisma.aiModelConfig.createMany({
+    data: missing.map((f) => ({ feature: f.feature, name: f.name })),
+    skipDuplicates: true,
+  });
+}
 
 export type ResolvedFeature = {
   providerKind: "OPENAI_COMPATIBLE" | "ANTHROPIC" | "GOOGLE";
