@@ -19,7 +19,7 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
   const session = await requireSession();
   const { threadId } = scrapeSchema.parse(await req.json());
 
-  if (!apifyEnabled()) {
+  if (!(await apifyEnabled())) {
     return jsonError(503, "Apify is not configured (set APIFY_TOKEN)");
   }
 

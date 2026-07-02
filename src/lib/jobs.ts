@@ -18,7 +18,7 @@ export type RefreshResult = {
 
 /** Re-scrapes metrics for every thread of a non-draft campaign. */
 export async function runMetricsRefresh(): Promise<RefreshResult> {
-  if (!apifyEnabled()) {
+  if (!(await apifyEnabled())) {
     return { scraped: 0, failed: 0, skipped: 0, apify: false };
   }
 

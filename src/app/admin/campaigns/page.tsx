@@ -8,7 +8,8 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminCampaignsPage() {
   const [products, stats] = await Promise.all([
-    prisma.product.findMany({ orderBy: { name: "asc" } }),
+    // archived products stay on existing campaigns but can't join new ones
+    prisma.product.findMany({ where: { archivedAt: null }, orderBy: { name: "asc" } }),
     getCampaignStats(),
   ]);
 

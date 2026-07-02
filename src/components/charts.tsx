@@ -51,6 +51,48 @@ function compact(n: number): string {
   return String(n);
 }
 
+/**
+ * Generic single-series time chart (clicks, views, revenue…).
+ * One series → no legend; the card title names it.
+ */
+export function TimeSeriesChart({
+  data,
+  format = "number",
+}: {
+  data: { date: string; value: number }[];
+  format?: "number" | "money";
+}) {
+  const fmt = (v: number) => (format === "money" ? `$${compact(v)}` : compact(v));
+  return (
+    <div className="h-56 w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
+          <CartesianGrid stroke={GRID} strokeWidth={1} vertical={false} />
+          <XAxis
+            dataKey="date"
+            {...axisProps}
+            tickFormatter={(d: string) => d.slice(5)}
+            minTickGap={24}
+          />
+          <YAxis {...axisProps} tickFormatter={fmt} width={52} />
+          <Tooltip {...tooltipStyle} formatter={(v) => fmt(Number(v))} />
+          <Area
+            type="monotone"
+            dataKey="value"
+            stroke={SERIES[0]}
+            strokeWidth={2}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            fill={SERIES[0]}
+            fillOpacity={0.1}
+            activeDot={{ r: 4, strokeWidth: 2, stroke: SURFACE }}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 /** Single-series clicks-over-time. One series → no legend; title names it. */
 export function ClicksAreaChart({ data }: { data: { date: string; clicks: number }[] }) {
   return (

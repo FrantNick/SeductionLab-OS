@@ -1,4 +1,7 @@
 import { prisma } from "@/lib/prisma";
+import { getIntegrationConfig, getIntegrationCredential } from "@/lib/integrations";
+import { getProxyFor, proxyUrl } from "@/lib/proxies";
+import { decryptSecret } from "@/lib/crypto";
 
 export type ScrapedMetrics = {
   views: number;
@@ -11,8 +14,24 @@ export type ScrapedMetrics = {
 
 const APIFY_BASE = "https://api.apify.com/v2";
 
-export function apifyEnabled(): boolean {
-  return Boolean(process.env.APIFY_TOKEN);
+/**
+ * Credentials resolve from the Apify Integration record first (managed
+ * in Admin → Integrations), falling back to env vars so existing
+ * deployments keep working unchanged.
+ */
+async function resolveApify(): Promise<{ token: string; actorId: string } | null> {
+  const [credential, config] = await Promise.all([
+    getIntegrationCredential("apify"),
+    getIntegrationConfig("apify"),
+  ]);
+  const token = credential ?? process.env.APIFY_TOKEN;
+  if (!token) return null;
+  const actorId = config.actorId || process.env.APIFY_ACTOR_ID || "goat255~twitter-tweet-scraper";
+  return { token, actorId };
+}
+
+export async function apifyEnabled(): Promise<boolean> {
+  return (await resolveApify()) !== null;
 }
 
 function num(...candidates: unknown[]): number {
@@ -40,11 +59,28 @@ function str(...candidates: unknown[]): string | null {
  * defensive: several known aliases are checked for each metric.
  */
 export async function scrapeTweet(twitterUrl: string, tweetId: string): Promise<ScrapedMetrics> {
-  const token = process.env.APIFY_TOKEN;
-  if (!token) throw new ApifyError("APIFY_TOKEN is not configured");
+  const apify = await resolveApify();
+  if (!apify) throw new ApifyError("Apify is not configured (Admin → Integrations or APIFY_TOKEN)");
 
-  const actorId = process.env.APIFY_ACTOR_ID ?? "goat255~twitter-tweet-scraper";
-  const endpoint = `${APIFY_BASE}/acts/${encodeURIComponent(actorId)}/run-sync-get-dataset-items?token=${encodeURIComponent(token)}`;
+  const endpoint = `${APIFY_BASE}/acts/${encodeURIComponent(apify.actorId)}/run-sync-get-dataset-items?token=${encodeURIComponent(apify.token)}`;
+
+  // If an outbound proxy is assigned to the "apify" service, the actor
+  // receives it as a custom proxy URL (actor-side scraping traffic).
+  const assignedProxy = await getProxyFor("apify");
+  const proxyConfiguration =
+    assignedProxy != null
+      ? {
+          useApifyProxy: false,
+          proxyUrls: [
+            proxyUrl({
+              ...assignedProxy,
+              passwordPlain: assignedProxy.passwordEncrypted
+                ? decryptSecret(assignedProxy.passwordEncrypted)
+                : null,
+            }),
+          ],
+        }
+      : undefined;
 
   const input = {
     // Cover the common input shapes accepted by tweet-scraper actors.
@@ -53,6 +89,7 @@ export async function scrapeTweet(twitterUrl: string, tweetId: string): Promise<
     urls: [twitterUrl],
     startUrls: [{ url: twitterUrl }],
     maxItems: 1,
+    ...(proxyConfiguration ? { proxyConfiguration } : {}),
   };
 
   const res = await fetch(endpoint, {

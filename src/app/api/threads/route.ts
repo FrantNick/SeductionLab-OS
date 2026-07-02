@@ -47,7 +47,7 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
 
   // Initial scrape (best-effort): submission must succeed even if Apify fails.
   let initialScrape: "ok" | "failed" | "disabled" = "disabled";
-  if (apifyEnabled()) {
+  if (await apifyEnabled()) {
     try {
       await scrapeAndStoreThreadMetrics(thread);
       initialScrape = "ok";

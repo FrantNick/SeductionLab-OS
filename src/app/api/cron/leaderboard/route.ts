@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isAuthorizedCron, runLeaderboardRefresh } from "@/lib/jobs";
+import { isAuthorizedCron } from "@/lib/jobs";
+import { executeJob } from "@/lib/job-runs";
 import { jsonError } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
@@ -9,8 +10,8 @@ export const maxDuration = 60;
 export async function GET(req: NextRequest) {
   if (!isAuthorizedCron(req)) return jsonError(401, "Unauthorized");
 
-  const result = await runLeaderboardRefresh();
-  return NextResponse.json({ job: "leaderboard", ...result, ranAt: new Date() });
+  const outcome = await executeJob("leaderboard", "cron");
+  return NextResponse.json({ job: "leaderboard", ...outcome, ranAt: new Date() });
 }
 
 export const POST = GET;

@@ -78,8 +78,17 @@ export async function computeLeaderboards(): Promise<{ entries: number; campaign
   let total = 0;
 
   for (const campaignId of scopes) {
-    const ranked = rankAggregates(await aggregateFor(campaignId));
+    const [ranked, previous] = await Promise.all([
+      aggregateFor(campaignId).then(rankAggregates),
+      prisma.leaderboardEntry.findMany({
+        where: { campaignId },
+        select: { affiliateId: true, rank: true },
+      }),
+    ]);
     total += ranked.length;
+
+    // Carry the outgoing rank forward so the UI can show movement.
+    const prevRank = new Map(previous.map((p) => [p.affiliateId, p.rank]));
 
     await prisma.$transaction([
       prisma.leaderboardEntry.deleteMany({ where: { campaignId } }),
@@ -88,6 +97,7 @@ export async function computeLeaderboards(): Promise<{ entries: number; campaign
           affiliateId: r.affiliateId,
           campaignId,
           rank: r.rank,
+          previousRank: prevRank.get(r.affiliateId) ?? null,
           clicks: r.clicks,
           views: r.views,
           threads: r.threads,
@@ -102,12 +112,18 @@ export async function computeLeaderboards(): Promise<{ entries: number; campaign
 
 export type LeaderboardRow = {
   rank: number;
+  /** rank at the previous compute; null on first appearance */
+  previousRank: number | null;
+  /** positive = climbed, negative = dropped, 0 = held */
+  movement: number;
   affiliateId: string;
   displayName: string;
+  avatarUrl: string | null;
   clicks: number;
   views: number;
   threads: number;
   revenue: number;
+  ctr: number;
   computedAt: Date;
 };
 
@@ -118,7 +134,7 @@ export async function getLeaderboard(
 ): Promise<LeaderboardRow[]> {
   let entries = await prisma.leaderboardEntry.findMany({
     where: { campaignId },
-    include: { affiliate: { select: { displayName: true } } },
+    include: { affiliate: { select: { displayName: true, avatarUrl: true } } },
     orderBy: { rank: "asc" },
     take: limit,
   });
@@ -127,7 +143,7 @@ export async function getLeaderboard(
     await computeLeaderboards();
     entries = await prisma.leaderboardEntry.findMany({
       where: { campaignId },
-      include: { affiliate: { select: { displayName: true } } },
+      include: { affiliate: { select: { displayName: true, avatarUrl: true } } },
       orderBy: { rank: "asc" },
       take: limit,
     });
@@ -135,12 +151,16 @@ export async function getLeaderboard(
 
   return entries.map((e) => ({
     rank: e.rank,
+    previousRank: e.previousRank,
+    movement: e.previousRank == null ? 0 : e.previousRank - e.rank,
     affiliateId: e.affiliateId,
     displayName: e.affiliate.displayName,
+    avatarUrl: e.affiliate.avatarUrl,
     clicks: e.clicks,
     views: e.views,
     threads: e.threads,
     revenue: Number(e.revenue),
+    ctr: e.views > 0 ? e.clicks / e.views : 0,
     computedAt: e.computedAt,
   }));
 }

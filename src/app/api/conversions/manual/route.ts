@@ -3,6 +3,8 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
 import { jsonError, withErrorHandling } from "@/lib/api";
+import { logAudit } from "@/lib/audit";
+import { notifyAffiliate } from "@/lib/notifications";
 
 const conversionSchema = z.object({
   affiliateId: z.string().min(1, "affiliateId is required"),
@@ -17,7 +19,7 @@ const conversionSchema = z.object({
  * The product defaults to the campaign's product when not supplied.
  */
 export const POST = withErrorHandling(async (req: NextRequest) => {
-  await requireAdmin();
+  const session = await requireAdmin();
   const input = conversionSchema.parse(await req.json());
 
   const campaign = await prisma.campaign.findUnique({ where: { id: input.campaignId } });
@@ -43,6 +45,22 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
       sourceClickId: input.sourceClickId,
     },
   });
+
+  await Promise.all([
+    logAudit({
+      userId: session.user.id,
+      action: "conversion.created",
+      entityType: "conversion",
+      entityId: conversion.id,
+      metadata: { revenue: input.revenue, campaignId: input.campaignId },
+    }),
+    notifyAffiliate(input.affiliateId, {
+      kind: "SUCCESS",
+      title: `Sale recorded: $${input.revenue.toFixed(2)}`,
+      body: `Campaign: ${campaign.name}`,
+      href: "/dashboard",
+    }),
+  ]);
 
   return NextResponse.json({ conversion }, { status: 201 });
 });

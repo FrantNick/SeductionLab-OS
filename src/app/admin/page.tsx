@@ -1,17 +1,25 @@
+import Link from "next/link";
 import { getCampaignStats, getClicksPerDay, getGlobalStats } from "@/lib/analytics";
 import { getLeaderboard } from "@/lib/leaderboard";
+import { prisma } from "@/lib/prisma";
 import { formatMoney, formatNumber, formatPercent, timeAgo } from "@/lib/format";
 import { Badge, Card, EmptyState, InternalLink, PageHeader, StatCard } from "@/components/ui";
 import { ClicksAreaChart } from "@/components/charts";
+import { RunJobButton } from "@/components/run-job-button";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminOverviewPage() {
-  const [stats, campaigns, leaderboard, clicksPerDay] = await Promise.all([
+  const [stats, campaigns, leaderboard, clicksPerDay, recentAudit] = await Promise.all([
     getGlobalStats(),
     getCampaignStats(),
     getLeaderboard(null, 5),
     getClicksPerDay(14),
+    prisma.auditLog.findMany({
+      include: { user: { select: { email: true } } },
+      orderBy: { createdAt: "desc" },
+      take: 6,
+    }),
   ]);
 
   const topCampaigns = [...campaigns].sort((a, b) => b.revenue - a.revenue).slice(0, 5);
@@ -19,6 +27,24 @@ export default async function AdminOverviewPage() {
   return (
     <>
       <PageHeader title="Overview" subtitle="Global performance across every campaign." />
+
+      {/* Quick actions */}
+      <div className="mb-6 flex flex-wrap gap-2">
+        <Link href="/admin/products" className="btn-secondary">
+          + Product
+        </Link>
+        <Link href="/admin/campaigns" className="btn-secondary">
+          + Campaign
+        </Link>
+        <Link href="/admin/campaigns" className="btn-secondary">
+          Assign affiliate
+        </Link>
+        <Link href="/admin/conversions" className="btn-secondary">
+          + Conversion
+        </Link>
+        <RunJobButton job="leaderboard" label="Refresh leaderboards" />
+        <RunJobButton job="refresh-metrics" label="Refresh thread metrics" />
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Revenue" value={formatMoney(stats.revenue)} hint={`${stats.conversions} conversions`} />
@@ -66,6 +92,26 @@ export default async function AdminOverviewPage() {
           )}
         </Card>
       </div>
+
+      <Card title="Recent admin activity" className="mt-6" padded={false}>
+        {recentAudit.length === 0 ? (
+          <EmptyState title="No audited actions yet" />
+        ) : (
+          <ul className="divide-y divide-ink-800">
+            {recentAudit.map((log) => (
+              <li key={log.id} className="flex items-center justify-between gap-3 px-5 py-2.5">
+                <div className="min-w-0">
+                  <code className="text-xs text-ember-text">{log.action}</code>
+                  <span className="ml-2 text-xs text-zinc-500">
+                    {log.user?.email ?? "system"}
+                  </span>
+                </div>
+                <span className="shrink-0 text-[11px] text-zinc-600">{timeAgo(log.createdAt)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
 
       <Card title="Campaigns by revenue" className="mt-6" padded={false}>
         {topCampaigns.length === 0 ? (

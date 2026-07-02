@@ -48,7 +48,7 @@ export default async function ThreadDetailPage({
       <PageHeader
         title="Thread detail"
         subtitle={`${thread.campaign.name} · by ${thread.affiliate.displayName}`}
-        action={apifyEnabled() ? <ScrapeButton threadId={thread.id} twitterUrl={thread.twitterUrl} /> : undefined}
+        action={(await apifyEnabled()) ? <ScrapeButton threadId={thread.id} twitterUrl={thread.twitterUrl} /> : undefined}
       />
 
       <Card>

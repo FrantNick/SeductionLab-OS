@@ -2,11 +2,16 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { api, errorMessage } from "@/lib/api-client";
+import { useClipboard } from "@/hooks/use-clipboard";
+import { useToast } from "@/components/toast";
 import { CopyButton } from "@/components/copy-button";
 
+type GenerateResponse = { url: string; reused: boolean };
+
 /**
- * Calls POST /api/tracking/generate for a campaign and shows the
- * resulting /go/{slug} URL with a copy control.
+ * Calls POST /api/tracking/generate for a campaign, auto-copies the
+ * resulting /go/{slug} URL and shows it with a copy control.
  */
 export function GenerateLinkButton({
   campaignId,
@@ -16,25 +21,25 @@ export function GenerateLinkButton({
   existingUrl?: string | null;
 }) {
   const router = useRouter();
+  const { toast } = useToast();
+  const { copy } = useClipboard();
   const [url, setUrl] = useState<string | null>(existingUrl ?? null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   async function generate() {
     setLoading(true);
-    setError(null);
     try {
-      const res = await fetch("/api/tracking/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ campaignId }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to generate link");
+      const data = await api.post<GenerateResponse>("/api/tracking/generate", { campaignId });
       setUrl(data.url);
+      await copy(data.url);
+      toast({
+        kind: "success",
+        title: data.reused ? "Existing link copied" : "Tracking link created",
+        description: "The URL is on your clipboard.",
+      });
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to generate link");
+      toast({ kind: "error", title: "Could not generate link", description: errorMessage(err) });
     } finally {
       setLoading(false);
     }
@@ -50,11 +55,8 @@ export function GenerateLinkButton({
   }
 
   return (
-    <div>
-      <button type="button" className="btn-primary w-full" onClick={generate} disabled={loading}>
-        {loading ? "Generating…" : "Generate tracking link"}
-      </button>
-      {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
-    </div>
+    <button type="button" className="btn-primary w-full" onClick={generate} disabled={loading}>
+      {loading ? "Generating…" : "Generate tracking link"}
+    </button>
   );
 }

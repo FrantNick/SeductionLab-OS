@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { api, errorMessage } from "@/lib/api-client";
+import { useToast } from "@/components/toast";
 
 /**
  * V1 manual revenue entry (admin) — posts to /api/conversions/manual.
@@ -14,32 +16,26 @@ export function ConversionForm({
   campaigns: { id: string; name: string }[];
 }) {
   const router = useRouter();
+  const { toast } = useToast();
   const [affiliateId, setAffiliateId] = useState(affiliates[0]?.id ?? "");
   const [campaignId, setCampaignId] = useState(campaigns[0]?.id ?? "");
   const [revenue, setRevenue] = useState("");
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    setMessage(null);
     try {
-      const res = await fetch("/api/conversions/manual", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ affiliateId, campaignId, revenue: Number(revenue) }),
+      await api.post("/api/conversions/manual", {
+        affiliateId,
+        campaignId,
+        revenue: Number(revenue),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to record conversion");
       setRevenue("");
-      setMessage({ kind: "ok", text: "Conversion recorded." });
+      toast({ kind: "success", title: "Conversion recorded" });
       router.refresh();
     } catch (err) {
-      setMessage({
-        kind: "err",
-        text: err instanceof Error ? err.message : "Failed to record conversion",
-      });
+      toast({ kind: "error", title: "Could not record sale", description: errorMessage(err) });
     } finally {
       setLoading(false);
     }
@@ -56,8 +52,15 @@ export function ConversionForm({
   return (
     <form onSubmit={submit} className="grid gap-4 sm:grid-cols-4">
       <div>
-        <label className="mb-1.5 block text-xs font-medium text-zinc-400">Affiliate</label>
-        <select className="input" value={affiliateId} onChange={(e) => setAffiliateId(e.target.value)}>
+        <label htmlFor="conv-affiliate" className="mb-1.5 block text-xs font-medium text-zinc-400">
+          Affiliate
+        </label>
+        <select
+          id="conv-affiliate"
+          className="input"
+          value={affiliateId}
+          onChange={(e) => setAffiliateId(e.target.value)}
+        >
           {affiliates.map((a) => (
             <option key={a.id} value={a.id}>
               {a.displayName}
@@ -66,8 +69,15 @@ export function ConversionForm({
         </select>
       </div>
       <div>
-        <label className="mb-1.5 block text-xs font-medium text-zinc-400">Campaign</label>
-        <select className="input" value={campaignId} onChange={(e) => setCampaignId(e.target.value)}>
+        <label htmlFor="conv-campaign" className="mb-1.5 block text-xs font-medium text-zinc-400">
+          Campaign
+        </label>
+        <select
+          id="conv-campaign"
+          className="input"
+          value={campaignId}
+          onChange={(e) => setCampaignId(e.target.value)}
+        >
           {campaigns.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
@@ -76,8 +86,11 @@ export function ConversionForm({
         </select>
       </div>
       <div>
-        <label className="mb-1.5 block text-xs font-medium text-zinc-400">Revenue (USD)</label>
+        <label htmlFor="conv-revenue" className="mb-1.5 block text-xs font-medium text-zinc-400">
+          Revenue (USD)
+        </label>
         <input
+          id="conv-revenue"
           className="input num"
           type="number"
           min="0.01"
@@ -93,15 +106,6 @@ export function ConversionForm({
           {loading ? "Saving…" : "Record sale"}
         </button>
       </div>
-      {message && (
-        <p
-          className={`sm:col-span-4 text-xs ${
-            message.kind === "ok" ? "text-emerald-400" : "text-red-400"
-          }`}
-        >
-          {message.text}
-        </p>
-      )}
     </form>
   );
 }

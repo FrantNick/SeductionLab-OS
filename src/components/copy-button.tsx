@@ -1,28 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useClipboard } from "@/hooks/use-clipboard";
+import { useToast } from "@/components/toast";
 
 export function CopyButton({ text, label = "Copy" }: { text: string; label?: string }) {
-  const [copied, setCopied] = useState(false);
+  const { copied, copy } = useClipboard();
+  const { toast } = useToast();
 
   return (
     <button
       type="button"
       className="btn-ghost"
       onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(text);
-        } catch {
-          // Clipboard API unavailable (http / permissions) — fall back.
-          const el = document.createElement("textarea");
-          el.value = text;
-          document.body.appendChild(el);
-          el.select();
-          document.execCommand("copy");
-          el.remove();
-        }
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
+        await copy(text);
+        toast({ kind: "success", title: "Copied to clipboard" });
       }}
     >
       {copied ? "Copied ✓" : label}

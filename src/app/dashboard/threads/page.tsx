@@ -2,9 +2,11 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getThreadsWithLatestMetrics } from "@/lib/analytics";
+import { apifyEnabled } from "@/lib/apify";
 import { formatNumber, timeAgo } from "@/lib/format";
 import { Card, EmptyState, ExternalLink, InternalLink, PageHeader } from "@/components/ui";
 import { ThreadSubmitForm } from "@/components/thread-submit-form";
+import { ScrapeButton } from "@/components/scrape-button";
 
 export const dynamic = "force-dynamic";
 
@@ -13,12 +15,13 @@ export default async function ThreadsPage() {
   const affiliateId = session?.user.affiliateId;
   if (!affiliateId) redirect("/dashboard");
 
-  const [assignments, threads] = await Promise.all([
+  const [assignments, threads, scrapingEnabled] = await Promise.all([
     prisma.campaignAssignment.findMany({
       where: { affiliateId, status: "ACTIVE", campaign: { status: "ACTIVE" } },
       include: { campaign: { select: { id: true, name: true } } },
     }),
     getThreadsWithLatestMetrics({ affiliateId }),
+    apifyEnabled(),
   ]);
 
   return (
@@ -51,18 +54,19 @@ export default async function ThreadsPage() {
                 <th className="text-right">Replies</th>
                 <th className="text-right">Retweets</th>
                 <th className="text-right">Last scraped</th>
+                {scrapingEnabled && <th className="w-20" />}
               </tr>
             </thead>
             <tbody>
               {threads.map((t) => (
                 <tr key={t.id}>
-                  <td>
+                  <td className="max-w-xs">
                     <InternalLink href={`/dashboard/threads/${t.id}`}>
                       {t.text ? `${t.text.slice(0, 48)}${t.text.length > 48 ? "…" : ""}` : `Tweet ${t.twitterId}`}
                     </InternalLink>
-                    <span className="ml-2 text-xs text-zinc-600">
-                      <ExternalLink href={t.twitterUrl}>open ↗</ExternalLink>
-                    </span>
+                    <p className="mt-0.5 text-xs text-zinc-600">
+                      <ExternalLink href={t.twitterUrl}>open on X ↗</ExternalLink>
+                    </p>
                   </td>
                   <td className="text-zinc-400">{t.campaignName}</td>
                   <td className="num text-right">{formatNumber(t.views)}</td>
@@ -70,6 +74,11 @@ export default async function ThreadsPage() {
                   <td className="num text-right">{formatNumber(t.replies)}</td>
                   <td className="num text-right">{formatNumber(t.retweets)}</td>
                   <td className="text-right text-xs text-zinc-500">{timeAgo(t.scrapedAt)}</td>
+                  {scrapingEnabled && (
+                    <td className="text-right">
+                      <ScrapeButton threadId={t.id} twitterUrl={t.twitterUrl} compact />
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

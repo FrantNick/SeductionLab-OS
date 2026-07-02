@@ -41,37 +41,47 @@ model User {
   role      Role     @default(AFFILIATE)
   createdAt DateTime @default(now())
 
-  affiliate Affiliate?
+  affiliate       Affiliate?
+  notifications   Notification[]
+  auditLogs       AuditLog[]
+  aiConversations AiConversation[]
 
   @@index([role])
 }
 
 model Affiliate {
-  id          String          @id @default(cuid())
-  userId      String          @unique
-  displayName String
-  status      AffiliateStatus @default(ACTIVE)
+  id                String          @id @default(cuid())
+  userId            String          @unique
+  displayName       String
+  status            AffiliateStatus @default(ACTIVE)
+  avatarUrl         String?
+  timezone          String?
+  notificationPrefs Json?
 
-  user               User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  threads            Thread[]
-  trackingLinks      TrackingLink[]
-  clicks             Click[]
-  conversions        Conversion[]
-  assignments        CampaignAssignment[]
-  leaderboardEntries LeaderboardEntry[]
+  user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  threads               Thread[]
+  trackingLinks         TrackingLink[]
+  clicks                Click[]
+  conversions           Conversion[]
+  assignments           CampaignAssignment[]
+  leaderboardEntries    LeaderboardEntry[]
+  experimentAssignments ExperimentAssignment[]
+  wonExperiments        Experiment[]           @relation("ExperimentWinner")
 
   @@index([status])
 }
 
 model Product {
-  id          String  @id @default(cuid())
+  id          String    @id @default(cuid())
   name        String
-  price       Decimal @db.Decimal(10, 2)
+  price       Decimal   @db.Decimal(10, 2)
   checkoutUrl String
+  archivedAt  DateTime?
 
   campaigns     Campaign[]
   trackingLinks TrackingLink[]
   conversions   Conversion[]
+  experiments   Experiment[]
 }
 
 model Campaign {
@@ -93,19 +103,20 @@ model Campaign {
   conversions        Conversion[]
   assignments        CampaignAssignment[]
   leaderboardEntries LeaderboardEntry[]
+  experiments        Experiment[]
 
   @@index([status])
   @@index([productId])
 }
 
 model Thread {
-  id          String    @id @default(cuid())
+  id          String   @id @default(cuid())
   affiliateId String
   campaignId  String
   twitterUrl  String
   twitterId   String
-  text        String    @default("")
-  postedAt    DateTime  @default(now())
+  text        String   @default("")
+  postedAt    DateTime @default(now())
 
   affiliate Affiliate       @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
   campaign  Campaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
@@ -207,19 +218,367 @@ model CampaignAssignment {
 // Cached leaderboard aggregation, recomputed by the leaderboard job.
 // campaignId = null → global leaderboard; otherwise per-campaign ranking.
 model LeaderboardEntry {
-  id          String   @id @default(cuid())
-  affiliateId String
-  campaignId  String?
-  rank        Int
-  clicks      Int      @default(0)
-  views       Int      @default(0)
-  threads     Int      @default(0)
-  revenue     Decimal  @default(0) @db.Decimal(12, 2)
-  computedAt  DateTime @default(now())
+  id           String   @id @default(cuid())
+  affiliateId  String
+  campaignId   String?
+  rank         Int
+  previousRank Int?
+  clicks       Int      @default(0)
+  views        Int      @default(0)
+  threads      Int      @default(0)
+  revenue      Decimal  @default(0) @db.Decimal(12, 2)
+  computedAt   DateTime @default(now())
 
   affiliate Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
   campaign  Campaign? @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
   @@unique([affiliateId, campaignId])
   @@index([campaignId, rank])
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// V2 — platform foundation (all additive; V1 models above unchanged)
+// ═══════════════════════════════════════════════════════════════════
+
+enum NotificationKind {
+  SUCCESS
+  WARNING
+  ERROR
+  INFO
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  kind      NotificationKind @default(INFO)
+  title     String
+  body      String           @default("")
+  href      String?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+// Key-value store for runtime-configurable platform settings
+// (branding, tracking domain, defaults). Never store secrets here —
+// secrets live in Integration/AiProvider with encrypted values.
+model AppSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+model FeatureFlag {
+  key         String   @id
+  name        String
+  description String   @default("")
+  enabled     Boolean  @default(false)
+  updatedAt   DateTime @updatedAt
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String // e.g. "product.created", "campaign.updated"
+  entityType String   @default("")
+  entityId   String   @default("")
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([action, createdAt(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+}
+
+enum JobStatus {
+  RUNNING
+  SUCCESS
+  FAILED
+}
+
+// One row per background-job execution — powers cron status, the
+// debug panel and "recent errors".
+model JobRun {
+  id         String    @id @default(cuid())
+  job        String // "leaderboard" | "refresh-metrics" | ...
+  status     JobStatus @default(RUNNING)
+  trigger    String    @default("cron") // "cron" | "manual" | "api"
+  result     Json?
+  error      String?
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  @@index([job, startedAt(sort: Desc)])
+  @@index([status, startedAt(sort: Desc)])
+}
+
+// ── AI infrastructure ────────────────────────────────────────────────
+
+// A configured LLM provider. `kind` selects the API adapter;
+// slug/name/baseUrl make any OpenAI-compatible host usable
+// (OpenRouter, DeepSeek, Groq, Together, Fireworks, Ollama, LM Studio…).
+enum AiProviderKind {
+  OPENAI_COMPATIBLE
+  ANTHROPIC
+  GOOGLE
+}
+
+model AiProvider {
+  id              String         @id @default(cuid())
+  slug            String         @unique // "openai", "anthropic", "openrouter", ...
+  name            String
+  kind            AiProviderKind @default(OPENAI_COMPATIBLE)
+  baseUrl         String // adapter endpoint, e.g. https://api.openai.com/v1
+  apiKeyEncrypted String? // AES-256-GCM via lib/crypto — never plaintext
+  enabled         Boolean        @default(false)
+  status          String         @default("unconfigured") // unconfigured|ok|error
+  lastValidatedAt DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  modelConfigs AiModelConfig[]
+}
+
+// Per-feature model selection. Each AI feature (thread writer, chat,
+// analyzer…) resolves its provider/model/params from here at runtime —
+// nothing is hardcoded.
+model AiModelConfig {
+  id             String   @id @default(cuid())
+  feature        String   @unique // "chat-assistant", "thread-writer", ...
+  name           String
+  providerId     String?
+  model          String   @default("") // provider-native model id
+  temperature    Float    @default(0.7)
+  maxTokens      Int      @default(2048)
+  reasoningLevel String   @default("none") // none|low|medium|high
+  systemPromptId String? // active Prompt powering this feature
+  enabledTools   Json? // future tool-use allowlist
+  enabled        Boolean  @default(false)
+  updatedAt      DateTime @updatedAt
+
+  provider     AiProvider? @relation(fields: [providerId], references: [id], onDelete: SetNull)
+  systemPrompt Prompt?     @relation(fields: [systemPromptId], references: [id], onDelete: SetNull)
+}
+
+// Versioned prompt management. The active version is a pointer —
+// rollback = repointing activeVersionId, nothing is deleted.
+model Prompt {
+  id              String   @id @default(cuid())
+  slug            String   @unique // "thread-writer", "hook-generator", ...
+  name            String
+  category        String   @default("general") // writer|analyzer|coach|...
+  activeVersionId String?  @unique
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  versions      PromptVersion[] @relation("PromptVersions")
+  activeVersion PromptVersion?  @relation("ActiveVersion", fields: [activeVersionId], references: [id])
+  modelConfigs  AiModelConfig[]
+}
+
+model PromptVersion {
+  id        String   @id @default(cuid())
+  promptId  String
+  version   Int
+  content   String
+  variables Json? // e.g. ["product", "angle", "audience"]
+  notes     String   @default("")
+  createdAt DateTime @default(now())
+
+  prompt   Prompt  @relation("PromptVersions", fields: [promptId], references: [id], onDelete: Cascade)
+  activeOf Prompt? @relation("ActiveVersion")
+
+  @@unique([promptId, version])
+}
+
+model AiConversation {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String   @default("New conversation")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages AiMessage[]
+
+  @@index([userId, updatedAt(sort: Desc)])
+}
+
+model AiMessage {
+  id             String   @id @default(cuid())
+  conversationId String
+  role           String // "user" | "assistant" | "system"
+  content        String
+  meta           Json? // provider/model/tokens used
+  createdAt      DateTime @default(now())
+
+  conversation AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+}
+
+enum KnowledgeKind {
+  PDF
+  MARKDOWN
+  TEXT
+  SOP
+  THREAD
+  SWIPE
+  BOOK
+}
+
+enum KnowledgeStatus {
+  READY
+  PENDING_EXTRACTION
+  FAILED
+}
+
+model KnowledgeDocument {
+  id        String          @id @default(cuid())
+  title     String
+  kind      KnowledgeKind   @default(TEXT)
+  content   String          @default("")
+  tags      String[]        @default([])
+  status    KnowledgeStatus @default(READY)
+  sizeBytes Int             @default(0)
+  createdAt DateTime        @default(now())
+
+  chunks KnowledgeChunk[]
+
+  @@index([kind])
+}
+
+// RAG-ready: documents are chunked on ingest; `embedding` stays null
+// until an embedding pipeline lands (see ROADMAP).
+model KnowledgeChunk {
+  id         String @id @default(cuid())
+  documentId String
+  index      Int
+  content    String
+  embedding  Json?
+
+  document KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, index])
+}
+
+// AI-generated analysis output (hook detection, thread grading,
+// daily summaries). Written by future AI analytics jobs; UI reads it.
+model AiInsight {
+  id          String   @id @default(cuid())
+  kind        String // "hook-analysis" | "thread-grade" | "daily-summary" | ...
+  subjectType String   @default("") // "thread" | "campaign" | ...
+  subjectId   String   @default("")
+  content     Json
+  createdAt   DateTime @default(now())
+
+  @@index([kind, createdAt(sort: Desc)])
+  @@index([subjectType, subjectId])
+}
+
+// ── Proxy management ────────────────────────────────────────────────
+
+enum ProxyKind {
+  RESIDENTIAL
+  DATACENTER
+  MOBILE
+}
+
+enum ProxyProtocol {
+  HTTP
+  HTTPS
+  SOCKS5
+}
+
+model Proxy {
+  id                String        @id @default(cuid())
+  name              String
+  provider          String        @default("") // vendor label, free text
+  kind              ProxyKind     @default(DATACENTER)
+  protocol          ProxyProtocol @default(HTTP)
+  host              String
+  port              Int
+  username          String?
+  passwordEncrypted String?
+  enabled           Boolean       @default(true)
+  status            String        @default("unchecked") // unchecked|healthy|unhealthy
+  latencyMs         Int?
+  successCount      Int           @default(0)
+  failureCount      Int           @default(0)
+  lastCheckedAt     DateTime?
+  createdAt         DateTime      @default(now())
+
+  assignments ProxyAssignment[]
+}
+
+// Routes a service ("apify", "ai", future integrations) through a proxy.
+model ProxyAssignment {
+  id      String @id @default(cuid())
+  service String @unique
+  proxyId String
+
+  proxy Proxy @relation(fields: [proxyId], references: [id], onDelete: Cascade)
+}
+
+// ── Integrations ────────────────────────────────────────────────────
+
+model Integration {
+  id                  String    @id @default(cuid())
+  slug                String    @unique // "apify", "shopify", "gumroad", "stripe", ...
+  name                String
+  enabled             Boolean   @default(false)
+  credentialEncrypted String? // primary secret (API token / key)
+  config              Json? // non-secret settings (actor id, shop domain, ...)
+  status              String    @default("unconfigured") // unconfigured|ok|error
+  statusDetail        String    @default("")
+  lastCheckedAt       DateTime?
+  updatedAt           DateTime  @updatedAt
+}
+
+// ── Experiments ─────────────────────────────────────────────────────
+// Campaigns are reusable playbooks; Experiments are time-bound tests
+// that scope existing campaign activity to a window + cohort.
+
+enum ExperimentStatus {
+  DRAFT
+  RUNNING
+  COMPLETED
+  CANCELLED
+}
+
+model Experiment {
+  id                String           @id @default(cuid())
+  name              String
+  productId         String
+  campaignId        String
+  goal              String           @default("")
+  status            ExperimentStatus @default(DRAFT)
+  startDate         DateTime
+  endDate           DateTime
+  winnerAffiliateId String?
+  createdAt         DateTime         @default(now())
+
+  product     Product                @relation(fields: [productId], references: [id])
+  campaign    Campaign               @relation(fields: [campaignId], references: [id])
+  winner      Affiliate?             @relation("ExperimentWinner", fields: [winnerAffiliateId], references: [id], onDelete: SetNull)
+  assignments ExperimentAssignment[]
+
+  @@index([status])
+  @@index([campaignId])
+}
+
+model ExperimentAssignment {
+  id           String @id @default(cuid())
+  experimentId String
+  affiliateId  String
+
+  experiment Experiment @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+  affiliate  Affiliate  @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+
+  @@unique([experimentId, affiliateId])
 }
