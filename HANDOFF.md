@@ -122,6 +122,12 @@ Conventions:
 `TrackingLink`, `Click`, `Conversion`, `CampaignAssignment`,
 `LeaderboardEntry`).
 
+**Products carry a landing-page URL** (`Product.landingUrl`) — one public
+page shared by all affiliates, never an affiliate-specific checkout.
+`Affiliate.handle` (unique, auto-slugified from the display name at signup,
+backfilled by migration) is the value the affiliate parameter carries in
+generated URLs; it falls back to the affiliate id when null.
+
 **Tracking links are per-thread.** An affiliate creates unlimited links inside
 a campaign — one for each thread they plan to post. `TrackingLink.threadId`
 (nullable, **unique**) binds a link to the one thread that used it:
@@ -154,7 +160,7 @@ Migrations are additive; V2 never altered V1 semantics.
 
 | Route | Auth | Purpose |
 |---|---|---|
-| `GET /go/[slug]` | public | log Click (hashed IP, UA, country) → 302 to checkout |
+| `GET /go/[slug]` | public | log Click (hashed IP, UA, country) → 302 to the landing page + affiliate/ref params |
 | `POST /api/register` | public | affiliate self-signup |
 | `POST /api/tracking/generate` | affiliate | creates a NEW link every call — one per planned thread |
 | `DELETE /api/tracking/[id]` | affiliate | delete own link, only while unused (no thread, no clicks) |
@@ -195,9 +201,19 @@ generation, plus affiliate profile/password/notification-prefs updates.
    bound to the thread permanently (unique `threadId`, race-safe consume).
 
 `/go/{slug}` logs a Click with salted SHA-256 IP hash (never raw IPs), UA and
-geo country header if the host provides it → 302 to `destinationUrl`
-(checkout + UTM + `ref={slug}`). Because the link is bound to one thread,
-each click belongs to exactly one thread.
+geo country header if the host provides it → 302 to the **product landing
+page** with the affiliate handle and link slug appended, e.g.
+`https://…/products/the-story-method?affiliate=maya-writes&ref=a8dj21`.
+The landing page is identical for every affiliate; its JS reads the affiliate
+param and swaps the CTA to that affiliate's checkout. Parameter names are
+settings (`tracking.affiliateParam` / `tracking.trackingParam`), and the
+destination is **computed at redirect time** — changing the landing URL or
+the param names updates every existing link instantly (the `destinationUrl`
+stored on the link is only a fallback snapshot). Because the link is bound to
+one thread, each click belongs to exactly one thread, and any storefront
+(Shopify, Gumroad, LemonSqueezy…) can read the params — the `ref` slug
+resolves link → affiliate → campaign → thread server-side, so no schema
+change is ever needed for new storefronts or extra params.
 
 **Threads/metrics:** the submitted tweet URL is parsed/validated, stored once
 per (affiliate, tweet) → Apify scrape appends `ThreadMetrics` snapshots
@@ -259,9 +275,11 @@ keep it that way.
 
 ## 12. Configuration & flags
 
-- `AppSetting` (branding, tracking domain, currency, leaderboard size,
-  metrics cadence) — registered defaults in `SETTING_DEFS`, editable under
-  Admin → Settings, applied without redeploy (sidebar app name, tracking URLs).
+- `AppSetting` (branding, tracking domain, affiliate/tracking parameter
+  names, currency, leaderboard size, metrics cadence) — registered defaults
+  in `SETTING_DEFS`, editable under Admin → Settings, applied without
+  redeploy (sidebar app name, tracking URLs, and landing-URL params, which
+  take effect at redirect time for every existing link).
 - `FeatureFlag` (`ai`, `experiments`, `integrations`, `proxies`, `beta`) gate
   nav items, pages and APIs at runtime.
 

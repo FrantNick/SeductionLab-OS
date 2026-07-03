@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { jsonError, withErrorHandling } from "@/lib/api";
+import { generateSlug, slugifyHandle } from "@/lib/tracking";
 
 const registerSchema = z.object({
   email: z.string().email("Valid email required"),
@@ -21,13 +22,19 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
   const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
   if (existing) return jsonError(409, "An account with this email already exists");
 
+  // URL-safe handle for landing URLs (?affiliate=<handle>); a short random
+  // suffix resolves collisions with existing affiliates.
+  const base = slugifyHandle(displayName) || "affiliate";
+  const taken = await prisma.affiliate.findUnique({ where: { handle: base } });
+  const handle = taken ? `${base}-${generateSlug().slice(0, 4)}` : base;
+
   const hashed = await bcrypt.hash(password, 12);
   const user = await prisma.user.create({
     data: {
       email: normalizedEmail,
       password: hashed,
       role: "AFFILIATE",
-      affiliate: { create: { displayName, status: "ACTIVE" } },
+      affiliate: { create: { displayName, handle, status: "ACTIVE" } },
     },
     select: { id: true, email: true, role: true },
   });

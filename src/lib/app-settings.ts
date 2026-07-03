@@ -10,6 +10,11 @@ export const SETTING_DEFS = {
   "branding.appName": { label: "App name", default: "Seduction Lab OS" },
   "branding.tagline": { label: "Tagline", default: "Marketing experimentation & attribution" },
   "tracking.domain": { label: "Tracking domain", default: "" }, // falls back to env
+  // Query-param names appended to product landing URLs — configurable so
+  // any storefront (Shopify, Gumroad, LemonSqueezy…) can read them without
+  // code changes. Applied at redirect time, so edits affect every link.
+  "tracking.affiliateParam": { label: "Affiliate parameter name", default: "affiliate" },
+  "tracking.trackingParam": { label: "Tracking parameter name", default: "ref" },
   "defaults.currency": { label: "Currency", default: "USD" },
   "defaults.leaderboardSize": { label: "Leaderboard size", default: 50 },
   "defaults.metricsRefreshHours": { label: "Metrics refresh cadence (hours)", default: 6 },

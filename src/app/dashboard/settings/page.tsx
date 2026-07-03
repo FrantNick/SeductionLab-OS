@@ -59,6 +59,18 @@ export default async function AffiliateSettingsPage() {
               <p className="mt-1 text-xs text-zinc-500">Shown on leaderboards and to admins.</p>
             </div>
             <div>
+              <span className="mb-1.5 block text-xs font-medium text-zinc-400">
+                Affiliate handle
+              </span>
+              <p className="rounded-lg border border-ink-700 bg-ink-900 px-3 py-2 text-sm">
+                <code className="text-ember-text">{affiliate.handle ?? affiliate.id}</code>
+              </p>
+              <p className="mt-1 text-xs text-zinc-500">
+                Identifies you on product landing pages — your tracking links append{" "}
+                <code>?affiliate={affiliate.handle ?? affiliate.id}</code> automatically.
+              </p>
+            </div>
+            <div>
               <label htmlFor="avatarUrl" className="mb-1.5 block text-xs font-medium text-zinc-400">
                 Avatar URL
               </label>

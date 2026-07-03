@@ -53,6 +53,9 @@ model Affiliate {
   id                String          @id @default(cuid())
   userId            String          @unique
   displayName       String
+  // URL-safe identifier used in landing-page URLs (?affiliate=<handle>).
+  // Auto-generated from displayName at signup; falls back to id when null.
+  handle            String?         @unique
   status            AffiliateStatus @default(ACTIVE)
   avatarUrl         String?
   timezone          String?
@@ -71,12 +74,16 @@ model Affiliate {
   @@index([status])
 }
 
+// landingUrl is the public product landing page — identical for every
+// affiliate. Tracking links send visitors there with affiliate/tracking
+// query params appended; the landing page's JS swaps in the affiliate's
+// checkout. Affiliates never need their own Product rows, only URLs.
 model Product {
-  id          String    @id @default(cuid())
-  name        String
-  price       Decimal   @db.Decimal(10, 2)
-  checkoutUrl String
-  archivedAt  DateTime?
+  id         String    @id @default(cuid())
+  name       String
+  price      Decimal   @db.Decimal(10, 2)
+  landingUrl String
+  archivedAt DateTime?
 
   campaigns     Campaign[]
   trackingLinks TrackingLink[]

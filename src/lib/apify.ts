@@ -128,20 +128,28 @@ export async function scrapeTweet(twitterUrl: string, tweetId: string): Promise<
       return id === tweetId;
     }) ?? items[0];
 
+  // The current actor nests counts under `metrics`; older scraper versions
+  // returned them flat (likes/views/…), camelCase (likeCount/…), snake_case
+  // or inside `legacy`. Check in that order; anything missing becomes 0 —
+  // a scrape must never crash on a shape change.
+  const metrics = (
+    item.metrics && typeof item.metrics === "object" ? item.metrics : {}
+  ) as Record<string, unknown>;
   const legacy = (item.legacy ?? {}) as Record<string, unknown>;
 
   return {
     views: num(
-      item.viewCount,
+      metrics.views,
       item.views,
+      item.viewCount,
       item.view_count,
       item.impressions,
       (item.views as Record<string, unknown> | undefined)?.count,
     ),
-    likes: num(item.likeCount, item.likes, item.favorite_count, legacy.favorite_count),
-    replies: num(item.replyCount, item.replies, item.reply_count, legacy.reply_count),
-    retweets: num(item.retweetCount, item.retweets, item.retweet_count, legacy.retweet_count),
-    quotes: num(item.quoteCount, item.quotes, item.quote_count, legacy.quote_count),
+    likes: num(metrics.likes, item.likes, item.likeCount, item.favorite_count, legacy.favorite_count),
+    replies: num(metrics.replies, item.replies, item.replyCount, item.reply_count, legacy.reply_count),
+    retweets: num(metrics.retweets, item.retweets, item.retweetCount, item.retweet_count, legacy.retweet_count),
+    quotes: num(metrics.quotes, item.quotes, item.quoteCount, item.quote_count, legacy.quote_count),
     text: str(item.text, item.fullText, item.full_text, legacy.full_text),
   };
 }

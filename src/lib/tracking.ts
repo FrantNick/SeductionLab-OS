@@ -1,5 +1,6 @@
 import { createHash } from "crypto";
 import { customAlphabet } from "nanoid";
+import { getSetting } from "@/lib/app-settings";
 
 // Unambiguous lowercase alphanumerics — slugs are typed/read by humans.
 const slugAlphabet = "23456789abcdefghjkmnpqrstuvwxyz";
@@ -7,6 +8,15 @@ const nanoSlug = customAlphabet(slugAlphabet, 8);
 
 export function generateSlug(): string {
   return nanoSlug();
+}
+
+/** "Maya Writes!" → "maya-writes" — URL-safe affiliate handle. */
+export function slugifyHandle(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
 }
 
 /** Privacy: raw IPs are never stored, only a salted SHA-256 hash. */
@@ -48,22 +58,42 @@ export function fullTrackingUrl(slug: string): string {
 }
 
 /**
- * Destination = product checkout URL + attribution params, so the
- * downstream store can see where the buyer came from even in V1.
+ * Appends query params to a URL. Generic on purpose: parameter names come
+ * from the caller (ultimately from AppSettings), never hardcoded, so any
+ * storefront (Shopify, Gumroad, LemonSqueezy…) can be pointed at whatever
+ * names it reads — and future params are one map entry away.
  */
-export function buildDestinationUrl(
-  checkoutUrl: string,
-  params: { slug: string; campaignId: string; affiliateId: string },
-): string {
+export function buildLandingUrl(landingUrl: string, params: Record<string, string>): string {
   try {
-    const url = new URL(checkoutUrl);
-    url.searchParams.set("utm_source", "twitter");
-    url.searchParams.set("utm_medium", "affiliate");
-    url.searchParams.set("utm_campaign", params.campaignId);
-    url.searchParams.set("utm_content", params.affiliateId);
-    url.searchParams.set("ref", params.slug);
+    const url = new URL(landingUrl);
+    for (const [key, value] of Object.entries(params)) {
+      if (key && value) url.searchParams.set(key, value);
+    }
     return url.toString();
   } catch {
-    return checkoutUrl;
+    return landingUrl; // malformed base URL — better to redirect unmodified than to 500
   }
+}
+
+/**
+ * The URL a tracking link sends visitors to: the product's landing page
+ * (identical for every affiliate) plus the affiliate identifier and the
+ * link slug, under admin-configured parameter names. The landing page's
+ * JS reads the affiliate param and swaps in that affiliate's checkout;
+ * the slug param resolves link → affiliate → campaign → thread
+ * server-side for webhook attribution.
+ */
+export async function buildAffiliateDestination(input: {
+  landingUrl: string;
+  affiliateRef: string;
+  slug: string;
+}): Promise<string> {
+  const [affiliateParam, trackingParam] = await Promise.all([
+    getSetting<string>("tracking.affiliateParam"),
+    getSetting<string>("tracking.trackingParam"),
+  ]);
+  return buildLandingUrl(input.landingUrl, {
+    [affiliateParam]: input.affiliateRef,
+    [trackingParam]: input.slug,
+  });
 }

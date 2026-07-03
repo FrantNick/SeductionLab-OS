@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireAffiliate } from "@/lib/auth";
 import { jsonError, withErrorHandling } from "@/lib/api";
-import { buildDestinationUrl, fullTrackingUrl, generateSlug } from "@/lib/tracking";
+import { buildAffiliateDestination, fullTrackingUrl, generateSlug } from "@/lib/tracking";
 
 const generateSchema = z.object({
   campaignId: z.string().min(1, "campaignId is required"),
@@ -35,6 +35,11 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
     return jsonError(400, "productId does not match the campaign's product");
   }
 
+  const affiliate = await prisma.affiliate.findUnique({
+    where: { id: affiliateId },
+    select: { handle: true },
+  });
+
   const slug = generateSlug();
   const link = await prisma.trackingLink.create({
     data: {
@@ -42,10 +47,12 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
       campaignId,
       productId: resolvedProductId,
       slug,
-      destinationUrl: buildDestinationUrl(campaign.product.checkoutUrl, {
+      // snapshot of the landing destination; /go recomputes it live so
+      // later product/setting changes reach existing links too
+      destinationUrl: await buildAffiliateDestination({
+        landingUrl: campaign.product.landingUrl,
+        affiliateRef: affiliate?.handle ?? affiliateId,
         slug,
-        campaignId,
-        affiliateId,
       }),
     },
   });

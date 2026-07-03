@@ -45,12 +45,22 @@ User (role: ADMIN | AFFILIATE) ──1:1── Affiliate (profile, status)
 ## 3. Attribution data model
 
 ```
-Product ─┬─ Campaign ─┬─ CampaignAssignment ── Affiliate
-         │            ├─ TrackingLink ──1:1── Thread ── ThreadMetrics (append-only)
-         │            │        └── Click (ipHash, UA, country)
-         │            └─ Conversion (revenue, sourceClickId → Click)
-         └─ Experiment ── ExperimentAssignment ── Affiliate
+Product (landingUrl)
+         ─┬─ Campaign ─┬─ CampaignAssignment ── Affiliate (handle)
+          │            ├─ TrackingLink ──1:1── Thread ── ThreadMetrics (append-only)
+          │            │        └── Click (ipHash, UA, country)
+          │            └─ Conversion (revenue, sourceClickId → Click)
+          └─ Experiment ── ExperimentAssignment ── Affiliate
 ```
+
+- **Products carry one landing-page URL shared by every affiliate** — never
+  affiliate-specific checkouts. Personalization happens in the URL:
+  `landingUrl?affiliate=<handle>&ref=<slug>`; the landing page's JS reads the
+  affiliate param and swaps its CTA to that affiliate's checkout. Different
+  affiliates never need different Products, only different generated URLs.
+- `Affiliate.handle` is the unique URL-safe identifier carried by the
+  affiliate parameter (auto-slugified from displayName at signup, backfilled
+  by migration, id fallback when null).
 
 - **One link per thread.** Affiliates create unlimited `TrackingLink`s inside
   a campaign — one before each thread they post. `TrackingLink.threadId` is
@@ -87,10 +97,21 @@ Product ─┬─ Campaign ─┬─ CampaignAssignment ── Affiliate
                  └─ transaction: create Thread + bind link (threadId ← thread.id)
 
 GET /go/{slug}
-  ├─ resolve TrackingLink (slug unique)
+  ├─ resolve TrackingLink (slug unique) + product.landingUrl + affiliate.handle
   ├─ INSERT Click { sha256(salt + ip), userAgent, country?, full attribution }
-  └─ 302 → checkoutUrl + utm_* + ref={slug}
+  └─ 302 → landingUrl?{affiliateParam}={handle}&{trackingParam}={slug}
 ```
+
+The destination is **built at redirect time** from the product's landing URL
+and the parameter names in AppSettings (`tracking.affiliateParam`, default
+`affiliate`; `tracking.trackingParam`, default `ref`) — nothing is hardcoded,
+and changing the landing URL or the names updates every existing link
+instantly. The `destinationUrl` snapshot stored on each link is only the
+fallback if that computation fails. Storefront-agnostic by design: Shopify,
+Gumroad, LemonSqueezy or any landing page can read the params, extra params
+are one entry in the generic `buildLandingUrl()` map, and the `ref` slug
+resolves link → affiliate → campaign → thread server-side — so future
+attribution needs require no schema change.
 
 Raw IPs are never persisted — only salted hashes (`IP_HASH_SALT`), enough for
 dedup/fraud heuristics without storing PII. Country comes from host geo
@@ -121,8 +142,19 @@ provider) with credentials from the Integration store (env fallback). The
 platform always scrapes one exact tweet. A `proxyConfiguration` block is added
 only when an outbound proxy is assigned to the `apify` service. Actor errors
 (`{"error":{"type","message"}}`) are parsed and surfaced verbatim to the UI
-and JobRun records. Sequential scraping avoids hammering the actor; failures
-degrade gracefully with per-thread error detail on the `JobRun`. No scraping
+and JobRun records. Metric extraction is shape-tolerant, first match wins:
+
+```
+views:    metrics.views    → views    → viewCount    → view_count → impressions
+likes:    metrics.likes    → likes    → likeCount    → favorite_count → legacy.favorite_count
+replies:  metrics.replies  → replies  → replyCount   → reply_count → legacy.reply_count
+retweets: metrics.retweets → retweets → retweetCount → retweet_count → legacy.retweet_count
+quotes:   metrics.quotes   → quotes   → quoteCount   → quote_count → legacy.quote_count
+```
+
+Missing fields default to 0 — an actor output change can never crash a
+scrape. Sequential scraping avoids hammering the actor; failures degrade
+gracefully with per-thread error detail on the `JobRun`. No scraping
 bypasses, no fabricated numbers: unconfigured = visibly disabled.
 
 ## 6. Leaderboards (cached aggregation)

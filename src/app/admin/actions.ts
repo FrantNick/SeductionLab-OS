@@ -12,7 +12,7 @@ import { notifyAffiliate } from "@/lib/notifications";
 const productSchema = z.object({
   name: z.string().min(2).max(120),
   price: z.coerce.number().positive(),
-  checkoutUrl: z.string().url(),
+  landingUrl: z.string().url(),
 });
 
 export async function createProduct(formData: FormData) {
@@ -20,7 +20,7 @@ export async function createProduct(formData: FormData) {
   const data = productSchema.parse({
     name: formData.get("name"),
     price: formData.get("price"),
-    checkoutUrl: formData.get("checkoutUrl"),
+    landingUrl: formData.get("landingUrl"),
   });
   const product = await prisma.product.create({ data });
   await logAudit({
@@ -39,7 +39,7 @@ export async function updateProduct(productId: string, formData: FormData) {
   const data = productSchema.parse({
     name: formData.get("name"),
     price: formData.get("price"),
-    checkoutUrl: formData.get("checkoutUrl"),
+    landingUrl: formData.get("landingUrl"),
   });
   await prisma.product.update({ where: { id: productId }, data });
   await logAudit({

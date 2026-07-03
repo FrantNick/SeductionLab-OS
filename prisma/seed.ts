@@ -2,6 +2,7 @@ import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { AI_FEATURES, DEFAULT_PROMPTS } from "../src/lib/ai/registry";
 import { FLAG_DEFS } from "../src/lib/feature-flags";
+import { slugifyHandle } from "../src/lib/tracking";
 
 const prisma = new PrismaClient();
 
@@ -93,7 +94,9 @@ async function seedDemo() {
         email: spec.email,
         password: affiliatePassword,
         role: "AFFILIATE",
-        affiliate: { create: { displayName: spec.displayName } },
+        affiliate: {
+          create: { displayName: spec.displayName, handle: slugifyHandle(spec.displayName) },
+        },
       },
       include: { affiliate: true },
     });
@@ -108,7 +111,7 @@ async function seedDemo() {
       id: "seed-product-ebook",
       name: "The Magnetic Opener (ebook)",
       price: 39,
-      checkoutUrl: "https://seductionlab.gumroad.com/l/magnetic-opener",
+      landingUrl: "https://www.seduction-lab.com/products/magnetic-opener",
     },
   });
   const course = await prisma.product.upsert({
@@ -118,7 +121,7 @@ async function seedDemo() {
       id: "seed-product-course",
       name: "Conversation Lab (video course)",
       price: 149,
-      checkoutUrl: "https://seductionlab.gumroad.com/l/conversation-lab",
+      landingUrl: "https://www.seduction-lab.com/products/conversation-lab",
     },
   });
   console.log("✓ 2 demo products");
@@ -222,9 +225,12 @@ async function seedDemo() {
         threadCount++;
 
         // Each thread gets its own tracking link (1:1) — attribution is exact.
+        // Destination mirrors production: landing page + affiliate + ref params
+        // (the /go redirect recomputes it live from settings anyway).
         const slug = `${campaign.id.slice(-4)}${ai}demo`.replace(/[^a-z0-9]/g, "").slice(0, 10);
-        const checkoutUrl =
-          campaign.productId === ebook.id ? ebook.checkoutUrl : course.checkoutUrl;
+        const landingUrl =
+          campaign.productId === ebook.id ? ebook.landingUrl : course.landingUrl;
+        const affiliateRef = affiliate.handle ?? affiliate.id;
         const link = await prisma.trackingLink.create({
           data: {
             affiliateId: affiliate.id,
@@ -232,7 +238,7 @@ async function seedDemo() {
             productId: campaign.productId,
             threadId: thread.id,
             slug,
-            destinationUrl: `${checkoutUrl}?utm_source=twitter&utm_medium=affiliate&utm_campaign=${campaign.id}&utm_content=${affiliate.id}&ref=${slug}`,
+            destinationUrl: `${landingUrl}?affiliate=${affiliateRef}&ref=${slug}`,
           },
         });
 

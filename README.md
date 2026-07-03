@@ -50,7 +50,7 @@ Set `SEED_DEMO_DATA="false"` to seed only the admin account.
 ## How the system fits together
 
 ```
-Admin creates Product ──► Campaign (angle, instructions, hook/CTA)
+Admin creates Product (landing page URL) ──► Campaign (angle, instructions, hook/CTA)
                               │ assigns
 Affiliate ◄───────────────────┘
    │ 1. POST /api/tracking/generate ──► new TrackingLink (/go/{slug}, unlimited per campaign)
@@ -59,6 +59,8 @@ Affiliate ◄───────────────────┘
    │        ──► Thread ◄──1:1──► TrackingLink (bound permanently)
    │        ──► Apify ──► ThreadMetrics (append-only snapshots)
 Visitor clicks /go/{slug}          ──► Click ──► TrackingLink ──► Thread ──► Campaign
+   └─ 302 → landingUrl?affiliate={handle}&ref={slug}  (param names are settings)
+            └─ landing-page JS swaps the CTA to that affiliate's checkout
 Admin POST /api/conversions/manual ──► Conversion (revenue, sourceClickId optional)
 Cron every 10 min                  ──► LeaderboardEntry (cached rankings)
 ```
@@ -78,7 +80,10 @@ computed per thread from its own link's clicks.
 
 ### Public
 - `GET /go/[slug]` — logs a Click (salted-hash IP, user agent, country) and
-  302-redirects to the product checkout URL with UTM attribution.
+  302-redirects to the product landing page with the affiliate handle and
+  link slug appended (parameter names configurable under Settings →
+  Affiliate tracking; the destination is computed at redirect time, so
+  product/setting changes reach every existing link).
 - `/login`, `/register` — Auth.js credentials; self-registration always
   creates an AFFILIATE. Admins are seeded.
 
@@ -150,9 +155,12 @@ tweet, so the input payload is:
 (plus a `proxyConfiguration` block when an outbound proxy is assigned to the
 `apify` service under Admin → Proxies). Actor errors are surfaced verbatim —
 in the scrape toast, the thread-submission warning and the JobRun record —
-never swallowed into a generic failure. Field extraction from actor output is
-defensive to tolerate scraper version variations. Without a token the system
-degrades gracefully — submissions still work, scraping reports "disabled".
+never swallowed into a generic failure. Metric extraction accepts every known
+output shape — nested `metrics.{views,likes,replies,retweets,quotes}` (current
+actor), flat fields (`views`, `likes`, …), camelCase (`viewCount`, …),
+snake_case and `legacy.*` — first match wins, missing fields default to 0, and
+a shape change can never crash a scrape. Without a token the system degrades
+gracefully — submissions still work, scraping reports "disabled".
 
 ## Environment variables
 

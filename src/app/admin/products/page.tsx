@@ -41,7 +41,7 @@ export default async function AdminProductsPage() {
     <>
       <PageHeader
         title="Products"
-        subtitle="What campaigns sell — tracking links redirect to the product checkout."
+        subtitle="What campaigns sell — tracking links redirect to the landing page with affiliate parameters; its JS swaps in the affiliate checkout."
       />
 
       <Card title="Add product">
@@ -60,8 +60,14 @@ export default async function AdminProductsPage() {
             </button>
           </div>
           <div className="sm:col-span-4">
-            <label className="mb-1.5 block text-xs font-medium text-zinc-400">Checkout URL</label>
-            <input name="checkoutUrl" type="url" className="input" required placeholder="https://yourstore.gumroad.com/l/product" />
+            <label className="mb-1.5 block text-xs font-medium text-zinc-400">
+              Landing page URL
+            </label>
+            <input name="landingUrl" type="url" className="input" required placeholder="https://www.seduction-lab.com/products/the-story-method" />
+            <p className="mt-1 text-xs text-zinc-500">
+              One page for every affiliate — links add <code>?affiliate=…&amp;ref=…</code>{" "}
+              (names configurable under Settings → Affiliate tracking).
+            </p>
           </div>
         </form>
       </Card>
@@ -94,7 +100,7 @@ export default async function AdminProductsPage() {
                     <td>
                       <p className="font-medium text-zinc-200">{p.name}</p>
                       <p className="max-w-xs truncate text-xs">
-                        <ExternalLink href={p.checkoutUrl}>{p.checkoutUrl}</ExternalLink>
+                        <ExternalLink href={p.landingUrl}>{p.landingUrl}</ExternalLink>
                       </p>
                       {/* Inline editor — disclosure keeps the table server-rendered */}
                       <details className="mt-1">
@@ -116,10 +122,10 @@ export default async function AdminProductsPage() {
                             required
                           />
                           <input
-                            name="checkoutUrl"
+                            name="landingUrl"
                             type="url"
                             className="input"
-                            defaultValue={p.checkoutUrl}
+                            defaultValue={p.landingUrl}
                             required
                           />
                           <button type="submit" className="btn-secondary w-fit">

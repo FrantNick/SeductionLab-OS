@@ -90,6 +90,49 @@ export default async function AdminSettingsPage() {
         </Card>
 
         <div className="space-y-6">
+          {/* Affiliate tracking — landing-URL parameter names */}
+          <Card title="Affiliate tracking">
+            <p className="mb-4 text-xs text-zinc-500">
+              Tracking links redirect to the product landing page with these query parameters
+              appended. Changes apply to every link immediately — the landing page (or a
+              storefront like Shopify) reads them to attribute the visitor.
+            </p>
+            <form action={saveAppSettings} className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-zinc-400">
+                  Affiliate parameter name
+                </label>
+                <input
+                  name="tracking.affiliateParam"
+                  className="input"
+                  required
+                  pattern="[A-Za-z0-9_\-]+"
+                  defaultValue={String(settings["tracking.affiliateParam"])}
+                />
+                <p className="mt-1 text-xs text-zinc-500">
+                  e.g. <code>?affiliate=maya-writes</code>
+                </p>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-zinc-400">
+                  Tracking parameter name
+                </label>
+                <input
+                  name="tracking.trackingParam"
+                  className="input"
+                  required
+                  pattern="[A-Za-z0-9_\-]+"
+                  defaultValue={String(settings["tracking.trackingParam"])}
+                />
+                <p className="mt-1 text-xs text-zinc-500">
+                  e.g. <code>?ref=a8dj21</code> — the link slug, resolves to campaign + thread
+                </p>
+              </div>
+              <button type="submit" className="btn-primary w-fit sm:col-span-2">
+                Save tracking parameters
+              </button>
+            </form>
+          </Card>
           {/* Feature flags */}
           <Card title="Feature flags" padded={false}>
             <ul className="divide-y divide-ink-800">

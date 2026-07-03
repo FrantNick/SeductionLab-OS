@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
-import { buildDestinationUrl, generateSlug } from "@/lib/tracking";
+import { buildAffiliateDestination, generateSlug } from "@/lib/tracking";
 
 /**
  * Debug tool: create a fresh tracking link for any affiliate × campaign
@@ -16,10 +16,10 @@ export async function generateTestLink(formData: FormData) {
   const affiliateId = z.string().min(1).parse(formData.get("affiliateId"));
   const campaignId = z.string().min(1).parse(formData.get("campaignId"));
 
-  const campaign = await prisma.campaign.findUnique({
-    where: { id: campaignId },
-    include: { product: true },
-  });
+  const [campaign, affiliate] = await Promise.all([
+    prisma.campaign.findUnique({ where: { id: campaignId }, include: { product: true } }),
+    prisma.affiliate.findUnique({ where: { id: affiliateId }, select: { handle: true } }),
+  ]);
   if (!campaign) throw new Error("Campaign not found");
 
   const slug = generateSlug();
@@ -29,10 +29,10 @@ export async function generateTestLink(formData: FormData) {
       campaignId,
       productId: campaign.productId,
       slug,
-      destinationUrl: buildDestinationUrl(campaign.product.checkoutUrl, {
+      destinationUrl: await buildAffiliateDestination({
+        landingUrl: campaign.product.landingUrl,
+        affiliateRef: affiliate?.handle ?? affiliateId,
         slug,
-        campaignId,
-        affiliateId,
       }),
     },
   });
