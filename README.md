@@ -133,7 +133,73 @@ computed per thread from its own link's clicks.
 
 Production: Vercel Cron (`vercel.json`) hits the two `/api/cron/*` endpoints —
 send `Authorization: Bearer $CRON_SECRET` (or `?secret=`) from any external
-scheduler when self-hosting. Local development: `npm run jobs:dev`.
+scheduler when self-hosting. Local development: `npm run jobs:dev` (calls job
+functions directly — no JobRun rows). Self-hosting: `scripts/jobs-cron.mjs`
+hits the endpoints on localhost so JobRuns are recorded (see below).
+
+## Self-hosting on your PC via ngrok (24/7)
+
+Runs the whole platform from a Windows PC, reachable on the internet through
+an ngrok tunnel, for as long as the PC is on. The Vercel path keeps working —
+this is an alternative, not a replacement.
+
+**Stable domain is mandatory.** Tracking links are posted publicly on X and
+must survive restarts. Reserve one in the ngrok dashboard:
+- Free tier: one static `*.ngrok-free.app` domain. **Caveat:** free domains
+  show a browser interstitial on first GET, which interrupts click-through
+  redirects from X. Fine for private testing; not for public links.
+- Paid plan + custom domain (e.g. `go.seduction-lab.com`): no interstitial —
+  recommended for public tracking links. (Do not attempt to bypass the
+  interstitial; it is part of ngrok's free-tier terms.)
+
+**1. Environment (`.env`)** — the app is now internet-facing, so use strong
+random values for `AUTH_SECRET`, `CRON_SECRET`, `IP_HASH_SALT` and change the
+seeded admin password immediately:
+
+```env
+NEXT_PUBLIC_APP_URL="https://go.seduction-lab.com"   # your stable ngrok domain
+TRACKING_DOMAIN="https://go.seduction-lab.com"        # or set tracking.domain in Admin → Settings
+AUTH_URL="https://go.seduction-lab.com"
+AUTH_TRUST_HOST="true"                                # ngrok terminates TLS → localhost HTTP
+```
+
+**2. One-time bring-up**
+
+```powershell
+npm ci
+# configure .env (above), have PostgreSQL running as a Windows service
+npm run db:deploy        # apply migrations
+npm run db:seed          # once — admin + platform defaults
+npm run build
+npm i -g pm2
+pm2 start ecosystem.config.js   # web (:3000) + jobs scheduler
+pm2 save
+# ngrok tunnel as a native Windows service (survives reboot/logoff):
+copy ngrok.example.yml ngrok.yml   # then fill in your authtoken + domain
+ngrok service install --config C:\path\to\SeductionLab-OS\ngrok.yml
+ngrok service start
+```
+
+Verify: open `https://<your-domain>/login`, then hit a tracking link
+`https://<your-domain>/go/<slug>` — it must 302 to the product landing page
+and the click must appear on the dashboard.
+
+**3. Keeping it alive**
+- `ecosystem.config.js` runs `seductionlab-web` (`next start -p 3000`) and
+  `seductionlab-jobs` (`scripts/jobs-cron.mjs`, which calls the cron
+  endpoints on localhost every 10 min / 6 h with `CRON_SECRET`, so JobRuns
+  appear in Admin → Debug). Both auto-restart.
+- Autostart PM2 on boot: `pm2 save`, then either
+  [pm2-installer](https://github.com/jessety/pm2-installer) / NSSM to run PM2
+  as a Windows service, or Task Scheduler running a `start.ps1` with
+  `pm2 resurrect` at logon.
+- Run PostgreSQL as a Windows service (the default installer does this).
+- **Disable PC sleep** (Settings → Power): links die while the PC sleeps.
+
+**Known caveat:** ngrok forwards no geo header, so `Click.country` is `null`
+for clicks arriving through the tunnel (on Vercel it comes from
+`x-vercel-ip-country`). Clicks still log fully otherwise. A local GeoIP
+lookup (MaxMind GeoLite2) before hashing is possible future work.
 
 Leaderboards are **cached aggregations** (`LeaderboardEntry`, global + per
 campaign, ranked by revenue → clicks → views); reads never aggregate live

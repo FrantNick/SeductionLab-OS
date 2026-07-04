@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { apifyEnabled } from "@/lib/apify";
 import { getJobStatus } from "@/lib/job-runs";
-import { fullTrackingUrl } from "@/lib/tracking";
+import { trackingBaseUrl } from "@/lib/tracking";
 import { formatDateTime, formatNumber, timeAgo } from "@/lib/format";
 import { Card, EmptyState, PageHeader } from "@/components/ui";
 import { RunJobButton } from "@/components/run-job-button";
@@ -70,6 +70,7 @@ export default async function AdminDebugPage() {
     }),
   ]);
   const dbLatencyMs = Date.now() - dbStart;
+  const linkBase = await trackingBaseUrl();
 
   const [
     users, affiliateCount, campaignCount, threads, metrics, links, clicks,
@@ -109,34 +110,48 @@ export default async function AdminDebugPage() {
             {jobStatus.jobs.map((job) => (
               <li
                 key={job.name}
-                className="flex items-center justify-between rounded-lg border border-ink-700 bg-ink-900 px-3 py-2"
+                className="rounded-lg border border-ink-700 bg-ink-900 px-3 py-2"
               >
-                <div>
-                  <p className="text-sm font-medium text-zinc-200">{job.label}</p>
-                  <p className="text-xs text-zinc-500">
-                    {job.cadence} · <code>{job.schedule}</code>
-                  </p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-zinc-200">{job.label}</p>
+                    <p className="text-xs text-zinc-500">
+                      {job.cadence} · <code>{job.schedule}</code>
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    {job.lastRun ? (
+                      <>
+                        <p
+                          className={`text-xs font-medium ${
+                            job.lastRun.status === "SUCCESS"
+                              ? "text-emerald-400"
+                              : job.lastRun.status === "FAILED"
+                                ? "text-red-400"
+                                : "text-amber-400"
+                          }`}
+                        >
+                          {job.lastRun.status.toLowerCase()} · {job.lastRun.trigger}
+                        </p>
+                        <p className="text-[11px] text-zinc-600">{timeAgo(job.lastRun.startedAt)}</p>
+                      </>
+                    ) : (
+                      <p className="text-xs text-zinc-600">never ran</p>
+                    )}
+                  </div>
                 </div>
-                <div className="text-right">
-                  {job.lastRun ? (
-                    <>
-                      <p
-                        className={`text-xs font-medium ${
-                          job.lastRun.status === "SUCCESS"
-                            ? "text-emerald-400"
-                            : job.lastRun.status === "FAILED"
-                              ? "text-red-400"
-                              : "text-amber-400"
-                        }`}
-                      >
-                        {job.lastRun.status.toLowerCase()} · {job.lastRun.trigger}
-                      </p>
-                      <p className="text-[11px] text-zinc-600">{timeAgo(job.lastRun.startedAt)}</p>
-                    </>
-                  ) : (
-                    <p className="text-xs text-zinc-600">never ran</p>
-                  )}
-                </div>
+                {/* raw result JSON — includes the captured Apify sampleItem,
+                    so the real actor output shape is inspectable from here */}
+                {job.lastRun?.result != null && (
+                  <details className="mt-1.5">
+                    <summary className="cursor-pointer text-xs text-zinc-500 hover:text-zinc-300">
+                      Last result
+                    </summary>
+                    <pre className="mt-1.5 max-h-56 overflow-auto whitespace-pre-wrap break-all rounded-lg border border-ink-700 bg-ink-950 p-2.5 text-[11px] text-zinc-400">
+                      {JSON.stringify(job.lastRun.result, null, 2)}
+                    </pre>
+                  </details>
+                )}
               </li>
             ))}
           </ul>
@@ -244,12 +259,12 @@ export default async function AdminDebugPage() {
                 className="flex items-center gap-2 rounded-lg border border-ink-700 bg-ink-900 px-3 py-2"
               >
                 <code className="flex-1 truncate text-xs text-ember-text">
-                  {fullTrackingUrl(link.slug)}
+                  {`${linkBase}/go/${link.slug}`}
                 </code>
                 <span className="text-[11px] text-zinc-500">
                   {link.affiliate.displayName} · {link.campaign.name}
                 </span>
-                <CopyButton text={fullTrackingUrl(link.slug)} />
+                <CopyButton text={`${linkBase}/go/${link.slug}`} />
               </li>
             ))}
           </ul>

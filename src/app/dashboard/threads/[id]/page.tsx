@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { apifyEnabled } from "@/lib/apify";
 import { getConversionsByLink } from "@/lib/analytics";
-import { fullTrackingUrl } from "@/lib/tracking";
+import { trackingBaseUrl } from "@/lib/tracking";
 import { formatDateTime, formatMoney, formatNumber, formatPercent } from "@/lib/format";
 import { Card, EmptyState, ExternalLink, PageHeader, StatCard } from "@/components/ui";
 import { EngagementLineChart, ViewsLineChart } from "@/components/charts";
@@ -40,7 +40,7 @@ export default async function ThreadDetailPage({
   }
 
   // Exact link performance + (for unlinked legacy threads) bind options.
-  const [convByLink, bindOptions] = await Promise.all([
+  const [convByLink, bindOptions, linkBase] = await Promise.all([
     thread.trackingLink
       ? getConversionsByLink([thread.trackingLink.id])
       : Promise.resolve(new Map<string, { count: number; revenue: number }>()),
@@ -51,6 +51,7 @@ export default async function ThreadDetailPage({
           orderBy: { createdAt: "desc" },
         })
       : Promise.resolve([]),
+    trackingBaseUrl(),
   ]);
   const linkConv = thread.trackingLink
     ? (convByLink.get(thread.trackingLink.id) ?? { count: 0, revenue: 0 })
@@ -90,9 +91,9 @@ export default async function ThreadDetailPage({
         <Card title="Tracking link performance" className="mt-6">
           <div className="mb-4 flex items-center gap-2 rounded-lg border border-ink-700 bg-ink-900 px-3 py-2">
             <code className="flex-1 truncate text-xs text-ember-text">
-              {fullTrackingUrl(thread.trackingLink.slug)}
+              {`${linkBase}/go/${thread.trackingLink.slug}`}
             </code>
-            <CopyButton text={fullTrackingUrl(thread.trackingLink.slug)} />
+            <CopyButton text={`${linkBase}/go/${thread.trackingLink.slug}`} />
           </div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard label="Clicks" value={formatNumber(linkClicks)} hint="on this thread's link" />
@@ -118,7 +119,7 @@ export default async function ThreadDetailPage({
           {isOwner && <LinkThreadForm threadId={thread.id} options={bindOptions.map((o) => ({
             id: o.id,
             slug: o.slug,
-            url: fullTrackingUrl(o.slug),
+            url: `${linkBase}/go/${o.slug}`,
           }))} />}
         </Card>
       )}

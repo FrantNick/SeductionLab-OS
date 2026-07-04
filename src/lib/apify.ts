@@ -34,14 +34,129 @@ export async function apifyEnabled(): Promise<boolean> {
   return (await resolveApify()) !== null;
 }
 
+/**
+ * Coerces one candidate to a count, tolerating every value form actors
+ * have been seen to emit:
+ *   27077            plain number
+ *   "27077"          numeric string
+ *   "27,077"         thousands separators (commas/spaces)
+ *   "27.1K" / "1.2M" magnitude suffixes (K/M/B, case-insensitive)
+ *   { count: "27077" }  Twitter GraphQL views object
+ * Returns null (not 0) when the value is unparseable so num() can try the
+ * next alias — likes arriving as numbers while views arrive as display
+ * strings is exactly the bug class this guards against.
+ */
+function toCount(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.max(0, Math.round(value));
+  }
+  if (typeof value === "string") {
+    const cleaned = value.replace(/[,\s]/g, "");
+    if (cleaned === "") return null;
+    const suffix = cleaned.slice(-1).toUpperCase();
+    const multiplier = suffix === "K" ? 1e3 : suffix === "M" ? 1e6 : suffix === "B" ? 1e9 : 1;
+    const numeric = Number(multiplier === 1 ? cleaned : cleaned.slice(0, -1));
+    if (Number.isFinite(numeric)) return Math.max(0, Math.round(numeric * multiplier));
+    return null;
+  }
+  if (value && typeof value === "object" && "count" in value) {
+    return toCount((value as { count: unknown }).count);
+  }
+  return null;
+}
+
 function num(...candidates: unknown[]): number {
   for (const c of candidates) {
-    if (typeof c === "number" && Number.isFinite(c)) return Math.max(0, Math.round(c));
-    if (typeof c === "string" && c.trim() !== "" && !Number.isNaN(Number(c))) {
-      return Math.max(0, Math.round(Number(c)));
-    }
+    const n = toCount(c);
+    if (n !== null) return n;
   }
   return 0;
+}
+
+/** Resolves dotted paths ("public_metrics.impression_count") against an item. */
+function pick(item: Record<string, unknown>, paths: readonly string[]): unknown[] {
+  return paths.map((path) =>
+    path.split(".").reduce<unknown>(
+      (cur, key) =>
+        cur && typeof cur === "object" ? (cur as Record<string, unknown>)[key] : undefined,
+      item,
+    ),
+  );
+}
+
+/**
+ * Alias precedence per metric — first parseable value wins. Order:
+ * the current actor's nested `metrics.*`, then flat names, then the
+ * camelCase/snake_case/public_metrics/legacy shapes of older scrapers.
+ * Keep old aliases forever: an actor version bump must degrade to a
+ * fallback, never to silent zeros.
+ */
+const METRIC_PATHS = {
+  views: [
+    "metrics.views",
+    "views",
+    "viewCount",
+    "viewsCount",
+    "view_count",
+    "views_count",
+    "impressions",
+    "impressionCount",
+    "impression_count",
+    "public_metrics.impression_count",
+    "viewCountString",
+    "views.count",
+    "legacy.views.count",
+  ],
+  likes: [
+    "metrics.likes",
+    "likes",
+    "likeCount",
+    "likesCount",
+    "favoriteCount",
+    "favorite_count",
+    "public_metrics.like_count",
+    "legacy.favorite_count",
+  ],
+  replies: [
+    "metrics.replies",
+    "replies",
+    "replyCount",
+    "repliesCount",
+    "reply_count",
+    "replies_count",
+    "public_metrics.reply_count",
+    "legacy.reply_count",
+  ],
+  retweets: [
+    "metrics.retweets",
+    "retweets",
+    "retweetCount",
+    "retweetsCount",
+    "retweet_count",
+    "retweets_count",
+    "public_metrics.retweet_count",
+    "legacy.retweet_count",
+  ],
+  quotes: [
+    "metrics.quotes",
+    "quotes",
+    "quoteCount",
+    "quotesCount",
+    "quote_count",
+    "quotes_count",
+    "public_metrics.quote_count",
+    "legacy.quote_count",
+  ],
+} as const;
+
+// Raw first item of the most recent scrape (capped) — logged server-side
+// and attached to the metrics-refresh JobRun so the actual actor output
+// shape is inspectable from Admin → Debug without shell access.
+const SAMPLE_CAP_BYTES = 4096;
+let lastRawItemSample: string | null = null;
+
+export function getLastRawItemSample(): string | null {
+  return lastRawItemSample;
 }
 
 function str(...candidates: unknown[]): string | null {
@@ -128,30 +243,38 @@ export async function scrapeTweet(twitterUrl: string, tweetId: string): Promise<
       return id === tweetId;
     }) ?? items[0];
 
-  // The current actor nests counts under `metrics`; older scraper versions
-  // returned them flat (likes/views/…), camelCase (likeCount/…), snake_case
-  // or inside `legacy`. Check in that order; anything missing becomes 0 —
-  // a scrape must never crash on a shape change.
-  const metrics = (
-    item.metrics && typeof item.metrics === "object" ? item.metrics : {}
-  ) as Record<string, unknown>;
+  // Diagnostic sample: public tweet data only — the token never appears in
+  // item payloads. Capped so JobRun rows stay small.
+  try {
+    lastRawItemSample = JSON.stringify(item).slice(0, SAMPLE_CAP_BYTES);
+    console.log("[apify] raw item sample:", lastRawItemSample);
+  } catch {
+    lastRawItemSample = null;
+  }
+
   const legacy = (item.legacy ?? {}) as Record<string, unknown>;
 
-  return {
-    views: num(
-      metrics.views,
-      item.views,
-      item.viewCount,
-      item.view_count,
-      item.impressions,
-      (item.views as Record<string, unknown> | undefined)?.count,
-    ),
-    likes: num(metrics.likes, item.likes, item.likeCount, item.favorite_count, legacy.favorite_count),
-    replies: num(metrics.replies, item.replies, item.replyCount, item.reply_count, legacy.reply_count),
-    retweets: num(metrics.retweets, item.retweets, item.retweetCount, item.retweet_count, legacy.retweet_count),
-    quotes: num(metrics.quotes, item.quotes, item.quoteCount, item.quote_count, legacy.quote_count),
+  const result: ScrapedMetrics = {
+    views: num(...pick(item, METRIC_PATHS.views)),
+    likes: num(...pick(item, METRIC_PATHS.likes)),
+    replies: num(...pick(item, METRIC_PATHS.replies)),
+    retweets: num(...pick(item, METRIC_PATHS.retweets)),
+    quotes: num(...pick(item, METRIC_PATHS.quotes)),
     text: str(item.text, item.fullText, item.full_text, legacy.full_text),
   };
+
+  // All-zero on a "successful" scrape is the silent failure mode this
+  // parser exists to prevent — make it loud (in logs, never for visitors).
+  if (
+    result.views + result.likes + result.replies + result.retweets + result.quotes === 0
+  ) {
+    console.warn(
+      "[apify] every metric parsed as 0 — the actor output shape may have changed. Sample:",
+      lastRawItemSample,
+    );
+  }
+
+  return result;
 }
 
 /**

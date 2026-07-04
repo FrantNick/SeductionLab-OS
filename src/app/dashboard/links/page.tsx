@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { fullTrackingUrl } from "@/lib/tracking";
+import { trackingBaseUrl } from "@/lib/tracking";
 import { getConversionsByLink } from "@/lib/analytics";
 import { PageHeader } from "@/components/ui";
 import { TrackingLinksManager } from "@/components/tracking-links-manager";
@@ -29,7 +29,10 @@ export default async function TrackingLinksPage() {
       orderBy: { campaign: { name: "asc" } },
     }),
   ]);
-  const convByLink = await getConversionsByLink(links.map((l) => l.id));
+  const [convByLink, linkBase] = await Promise.all([
+    getConversionsByLink(links.map((l) => l.id)),
+    trackingBaseUrl(),
+  ]);
 
   return (
     <>
@@ -43,7 +46,7 @@ export default async function TrackingLinksPage() {
           return {
             id: l.id,
             slug: l.slug,
-            url: fullTrackingUrl(l.slug),
+            url: `${linkBase}/go/${l.slug}`,
             campaignId: l.campaignId,
             campaignName: l.campaign.name,
             createdAt: l.createdAt,

@@ -1,0 +1,21 @@
+# ngrok agent config for self-hosting Seduction Lab OS.
+#
+#   1. Copy to ngrok.yml (gitignored) and fill in your authtoken.
+#   2. Reserve a STABLE domain in the ngrok dashboard — tracking links are
+#      posted publicly on X and must survive restarts:
+#        - free tier: one static *.ngrok-free.app domain (note: browser
+#          GETs on free domains show an interstitial page, which interrupts
+#          click-through redirects — a paid plan + custom domain removes it
+#          and is recommended for public tracking links), or
+#        - paid plan: a custom domain like go.seduction-lab.com.
+#   3. Install + start as a Windows service (survives logoff/reboot):
+#        ngrok service install --config C:\path\to\ngrok.yml
+#        ngrok service start
+version: "3"
+agent:
+  authtoken: <YOUR_NGROK_AUTHTOKEN>
+tunnels:
+  seductionlab:
+    proto: http
+    addr: 3000
+    domain: go.seduction-lab.com # your reserved/custom domain — MUST be stable

@@ -19,6 +19,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# ngrok config carries the authtoken — commit only the .example template
+ngrok.yml
+
 # env files
 .env
 .env.local

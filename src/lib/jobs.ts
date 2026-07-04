@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { apifyEnabled, scrapeAndStoreThreadMetrics } from "@/lib/apify";
+import { apifyEnabled, getLastRawItemSample, scrapeAndStoreThreadMetrics } from "@/lib/apify";
 import { computeLeaderboards } from "@/lib/leaderboard";
 
 /**
@@ -16,6 +16,9 @@ export type RefreshResult = {
   apify: boolean;
   /** Per-thread actor error messages (capped) so failures are diagnosable from the JobRun. */
   errors?: { threadId: string; error: string }[];
+  /** Raw first item of the last scrape (capped ~4 KB) — the actual actor
+   *  output shape, inspectable from Admin → Debug without shell access. */
+  sampleItem?: string;
 };
 
 /** Re-scrapes metrics for every thread of a non-draft campaign. */
@@ -49,7 +52,15 @@ export async function runMetricsRefresh(): Promise<RefreshResult> {
   }
 
   const failed = threads.length - scraped;
-  return { scraped, failed, skipped: 0, apify: true, ...(failed > 0 ? { errors } : {}) };
+  const sampleItem = getLastRawItemSample();
+  return {
+    scraped,
+    failed,
+    skipped: 0,
+    apify: true,
+    ...(failed > 0 ? { errors } : {}),
+    ...(sampleItem ? { sampleItem } : {}),
+  };
 }
 
 export async function runLeaderboardRefresh() {

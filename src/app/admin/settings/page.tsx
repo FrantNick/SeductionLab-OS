@@ -12,11 +12,12 @@ import { saveAppSettings, toggleFeatureFlag } from "./actions";
 export const dynamic = "force-dynamic";
 
 export default async function AdminSettingsPage() {
-  const [settings, flags, jobStatus, apify] = await Promise.all([
+  const [settings, flags, jobStatus, apify, linkBase] = await Promise.all([
     getAllSettings(),
     getAllFlags(),
     getJobStatus(),
     apifyEnabled(),
+    trackingBaseUrl(),
   ]);
 
   return (
@@ -53,11 +54,13 @@ export default async function AdminSettingsPage() {
               <input
                 name="tracking.domain"
                 className="input"
-                placeholder={trackingBaseUrl()}
+                placeholder={linkBase}
                 defaultValue={String(settings["tracking.domain"])}
               />
               <p className="mt-1 text-xs text-zinc-500">
-                Empty = use TRACKING_DOMAIN / NEXT_PUBLIC_APP_URL from the environment.
+                Public origin for /go links (e.g. your ngrok domain). Applies to link display
+                everywhere without a rebuild. Empty = use TRACKING_DOMAIN /
+                NEXT_PUBLIC_APP_URL from the environment.
               </p>
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -120,12 +123,12 @@ export default async function AdminSettingsPage() {
                 <input
                   name="tracking.trackingParam"
                   className="input"
-                  required
-                  pattern="[A-Za-z0-9_\-]+"
+                  pattern="[A-Za-z0-9_\-]*"
                   defaultValue={String(settings["tracking.trackingParam"])}
                 />
                 <p className="mt-1 text-xs text-zinc-500">
-                  e.g. <code>?ref=a8dj21</code> — the link slug, resolves to campaign + thread
+                  e.g. <code>?ref=a8dj21</code> — the link slug, resolves to campaign + thread.
+                  Leave empty to append only the affiliate parameter.
                 </p>
               </div>
               <button type="submit" className="btn-primary w-fit sm:col-span-2">

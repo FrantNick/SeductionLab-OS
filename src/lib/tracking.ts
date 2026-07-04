@@ -44,17 +44,30 @@ export function getClientCountry(headers: Headers): string | null {
   );
 }
 
-/** Base URL used when rendering full tracking links, e.g. https://go.seduction-lab.com */
-export function trackingBaseUrl(): string {
-  return (
-    process.env.TRACKING_DOMAIN ??
-    process.env.NEXT_PUBLIC_APP_URL ??
-    "http://localhost:3000"
-  ).replace(/\/$/, "");
+/**
+ * Base URL used when rendering full tracking links, e.g.
+ * https://go.seduction-lab.com. Resolution order: the tracking.domain
+ * AppSetting (editable under Admin → Settings — lets the operator point
+ * links at a new public domain, e.g. an ngrok URL, without touching .env
+ * or rebuilding) → TRACKING_DOMAIN → NEXT_PUBLIC_APP_URL → localhost.
+ */
+export async function trackingBaseUrl(): Promise<string> {
+  let configured = "";
+  try {
+    configured = String((await getSetting<string>("tracking.domain")) ?? "").trim();
+  } catch {
+    // DB unavailable (build-time render, first boot) — env fallback below
+  }
+  const base =
+    configured ||
+    process.env.TRACKING_DOMAIN ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    "http://localhost:3000";
+  return base.replace(/\/$/, "");
 }
 
-export function fullTrackingUrl(slug: string): string {
-  return `${trackingBaseUrl()}/go/${slug}`;
+export async function fullTrackingUrl(slug: string): Promise<string> {
+  return `${await trackingBaseUrl()}/go/${slug}`;
 }
 
 /**
@@ -67,7 +80,10 @@ export function buildLandingUrl(landingUrl: string, params: Record<string, strin
   try {
     const url = new URL(landingUrl);
     for (const [key, value] of Object.entries(params)) {
-      if (key && value) url.searchParams.set(key, value);
+      // An empty param NAME means "do not append this param" — setting
+      // tracking.trackingParam to "" disables the ref param entirely for
+      // landing pages that must receive only the affiliate identifier.
+      if (key.trim() && value) url.searchParams.set(key.trim(), value);
     }
     return url.toString();
   } catch {

@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getThreadsWithLatestMetrics } from "@/lib/analytics";
 import { apifyEnabled } from "@/lib/apify";
-import { fullTrackingUrl } from "@/lib/tracking";
+import { trackingBaseUrl } from "@/lib/tracking";
 import { formatNumber, formatPercent, timeAgo } from "@/lib/format";
 import { Card, EmptyState, ExternalLink, InternalLink, PageHeader } from "@/components/ui";
 import { ThreadSubmitForm } from "@/components/thread-submit-form";
@@ -16,7 +16,7 @@ export default async function ThreadsPage() {
   const affiliateId = session?.user.affiliateId;
   if (!affiliateId) redirect("/dashboard");
 
-  const [assignments, threads, unusedLinks, scrapingEnabled] = await Promise.all([
+  const [assignments, threads, unusedLinks, scrapingEnabled, linkBase] = await Promise.all([
     prisma.campaignAssignment.findMany({
       where: { affiliateId, status: "ACTIVE", campaign: { status: "ACTIVE" } },
       include: { campaign: { select: { id: true, name: true } } },
@@ -28,6 +28,7 @@ export default async function ThreadsPage() {
       orderBy: { createdAt: "desc" },
     }),
     apifyEnabled(),
+    trackingBaseUrl(),
   ]);
 
   return (
@@ -43,7 +44,7 @@ export default async function ThreadsPage() {
           unusedLinks={unusedLinks.map((l) => ({
             id: l.id,
             slug: l.slug,
-            url: fullTrackingUrl(l.slug),
+            url: `${linkBase}/go/${l.slug}`,
             campaignId: l.campaignId,
             createdAt: l.createdAt,
           }))}

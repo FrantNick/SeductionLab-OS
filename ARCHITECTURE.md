@@ -230,13 +230,35 @@ self-register their keys.
 ## 10. Background execution
 
 ```
-vercel.json cron ──► /api/cron/leaderboard      (*/10 min)
-                 ──► /api/cron/refresh-metrics  (0 */6 h)
+vercel.json cron ──────► /api/cron/leaderboard      (*/10 min)
+                 ──────► /api/cron/refresh-metrics  (0 */6 h)
+self-host: PM2 ──► scripts/jobs-cron.mjs ──► same endpoints on localhost
    auth: Bearer CRON_SECRET or ?secret=
 Admin UI ──► POST /api/admin/jobs {job|"all"}   (audited, requireAdmin)
-Local dev ──► scripts/jobs-dev.ts scheduler
-All paths ──► executeJob() ──► JobRun row (status, trigger, result, error)
+Local dev ──► scripts/jobs-dev.ts (direct calls — records NO JobRuns)
+Endpoint/API paths ──► executeJob() ──► JobRun row (status, trigger, result, error)
 ```
+
+## 10b. Self-host topology (Windows PC + ngrok)
+
+```
+X click on /go/{slug}
+   │ https://go.seduction-lab.com  (stable reserved ngrok domain — TLS ends here)
+   ▼
+ngrok agent (native Windows service) ──► http://localhost:3000
+   ▼
+Next.js (PM2: seductionlab-web) ──► /go/[slug]
+   ├─ INSERT Click (ipHash, UA; country = null — ngrok sends no geo header)
+   └─ 302 → landingUrl?affiliate=<handle>&ref=<slug>
+
+PM2: seductionlab-jobs ──► localhost /api/cron/* every 10m/6h (CRON_SECRET)
+PostgreSQL: Windows service
+```
+
+Same code path as Vercel — only the scheduler and the TLS terminator differ.
+The public domain lives in `NEXT_PUBLIC_APP_URL`/`AUTH_URL` (or the
+`tracking.domain` setting, which wins at runtime), so links keep working
+across restarts as long as the ngrok domain is reserved.
 
 ## 11. UI system
 

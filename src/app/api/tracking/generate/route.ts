@@ -57,5 +57,5 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
     },
   });
 
-  return NextResponse.json({ link, url: fullTrackingUrl(link.slug) }, { status: 201 });
+  return NextResponse.json({ link, url: await fullTrackingUrl(link.slug) }, { status: 201 });
 });

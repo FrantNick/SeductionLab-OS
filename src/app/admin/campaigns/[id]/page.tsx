@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getLeaderboard } from "@/lib/leaderboard";
 import { getConversionsByLink, getThreadsWithLatestMetrics } from "@/lib/analytics";
-import { fullTrackingUrl } from "@/lib/tracking";
+import { trackingBaseUrl } from "@/lib/tracking";
 import { formatMoney, formatNumber, formatPercent, timeAgo } from "@/lib/format";
 import { Badge, Card, EmptyState, InternalLink, PageHeader } from "@/components/ui";
 import { CopyButton } from "@/components/copy-button";
@@ -52,7 +52,10 @@ export default async function AdminCampaignDetailPage({
       orderBy: { createdAt: "desc" },
     }),
   ]);
-  const convByLink = await getConversionsByLink(trackingLinks.map((l) => l.id));
+  const [convByLink, linkBase] = await Promise.all([
+    getConversionsByLink(trackingLinks.map((l) => l.id)),
+    trackingBaseUrl(),
+  ]);
   const linkedCount = trackingLinks.filter((l) => l.threadId).length;
 
   const dateValue = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : "");
@@ -279,7 +282,7 @@ export default async function AdminCampaignDetailPage({
                     <td>
                       <div className="flex items-center gap-1.5">
                         <code className="text-xs text-ember-text">{link.slug}</code>
-                        <CopyButton text={fullTrackingUrl(link.slug)} />
+                        <CopyButton text={`${linkBase}/go/${link.slug}`} />
                       </div>
                     </td>
                     <td className="text-zinc-400">{link.affiliate.displayName}</td>

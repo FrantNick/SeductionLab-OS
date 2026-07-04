@@ -220,6 +220,20 @@ per (affiliate, tweet) → Apify scrape appends `ThreadMetrics` snapshots
 (initial + every 6 h + manual refresh). Without Apify configured the platform
 says "not configured" — it never fabricates metrics.
 
+**Metric parsing (lib/apify.ts).** Diagnosis first: every scrape logs a
+capped (~4 KB) raw first item server-side and attaches it to the
+metrics-refresh `JobRun.result.sampleItem`, readable under Admin → Debug →
+Scheduled jobs → "Last result" — always inspect that before touching the
+extractor. Extraction is a per-metric alias table (`METRIC_PATHS`) resolved
+with a generic dotted-path picker (`metrics.*`, flat, camelCase, snake_case,
+`public_metrics.*`, `legacy.*`, `views.count`); numeric coercion (`toCount`)
+tolerates plain numbers, numeric strings, `"27,077"` (separators),
+`"27.1K"/"1.2M"/"3B"` (magnitude suffixes) and `{ count: … }` objects.
+Unparseable values fall through to the next alias; only after all aliases
+fail does a metric become 0 — and an all-zero parse on a successful scrape
+logs a loud warning with the sample. Never remove old aliases: actor version
+bumps must degrade to a fallback, not to silent zeros.
+
 **Revenue:** manual `Conversion` entry (admin) with full attribution;
 `sourceClickId` links a sale to the click (and therefore thread) that earned
 it. Webhook attribution lands in V2.1 (see ROADMAP).
@@ -238,8 +252,24 @@ per-thread revenue is attributed proportionally to view share (documented in
 `JOB_DEFS` (lib/job-runs.ts) registers `leaderboard` (10 min) and
 `refresh-metrics` (6 h). Every execution — cron, manual, API — creates a
 `JobRun` row (status/trigger/result/error) powering the debug panel, settings
-status and health checks. Production scheduling: `vercel.json` cron (or any
-scheduler hitting `/api/cron/*` with the secret). Local: `npm run jobs:dev`.
+status and health checks. **JobRuns are only recorded when jobs go through
+the `/api/cron/*` endpoints (or the admin jobs API)** — `scripts/jobs-dev.ts`
+calls the job functions directly and records nothing, so it is for local
+development only. Production scheduling: `vercel.json` cron, or when
+self-hosting `scripts/jobs-cron.mjs` (run by PM2), which hits the endpoints
+on localhost with `Authorization: Bearer CRON_SECRET` — localhost on purpose,
+so internal traffic never rides the public tunnel.
+
+**Self-host topology (Windows PC + ngrok):** PM2 keeps `seductionlab-web`
+(`next start -p 3000`) and `seductionlab-jobs` (`jobs-cron.mjs`) alive;
+PostgreSQL runs as a Windows service; the ngrok agent runs as its own
+Windows service (`ngrok service install/start`, config from
+`ngrok.example.yml`) exposing port 3000 on a **stable reserved domain** —
+that domain goes into `NEXT_PUBLIC_APP_URL`/`AUTH_URL` (with
+`AUTH_TRUST_HOST=true`) or the `tracking.domain` setting. Caveats: ngrok's
+free-tier interstitial interrupts public click-throughs (paid custom domain
+recommended), and no geo header exists behind ngrok so `Click.country` is
+null. See README → "Self-hosting on your PC via ngrok".
 
 ## 10. AI infrastructure
 
