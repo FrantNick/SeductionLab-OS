@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getThreadsWithLatestMetrics } from "@/lib/analytics";
 import { apifyEnabled } from "@/lib/apify";
 import { trackingBaseUrl } from "@/lib/tracking";
-import { formatNumber, formatPercent, timeAgo } from "@/lib/format";
+import { formatNumber, formatPercent, threadLabel, timeAgo } from "@/lib/format";
 import { Card, EmptyState, ExternalLink, InternalLink, PageHeader } from "@/components/ui";
 import { ThreadSubmitForm } from "@/components/thread-submit-form";
 import { ScrapeButton } from "@/components/scrape-button";
@@ -24,7 +24,14 @@ export default async function ThreadsPage() {
     getThreadsWithLatestMetrics({ affiliateId }),
     prisma.trackingLink.findMany({
       where: { affiliateId, threadId: null },
-      select: { id: true, slug: true, campaignId: true, createdAt: true },
+      select: {
+        id: true,
+        slug: true,
+        campaignId: true,
+        createdAt: true,
+        threadName: true,
+        threadDescription: true,
+      },
       orderBy: { createdAt: "desc" },
     }),
     apifyEnabled(),
@@ -47,6 +54,8 @@ export default async function ThreadsPage() {
             url: `${linkBase}/go/${l.slug}`,
             campaignId: l.campaignId,
             createdAt: l.createdAt,
+            threadName: l.threadName,
+            threadDescription: l.threadDescription,
           }))}
         />
       </Card>
@@ -76,9 +85,7 @@ export default async function ThreadsPage() {
               {threads.map((t) => (
                 <tr key={t.id}>
                   <td className="max-w-xs">
-                    <InternalLink href={`/dashboard/threads/${t.id}`}>
-                      {t.text ? `${t.text.slice(0, 48)}${t.text.length > 48 ? "…" : ""}` : `Tweet ${t.twitterId}`}
-                    </InternalLink>
+                    <InternalLink href={`/dashboard/threads/${t.id}`}>{threadLabel(t)}</InternalLink>
                     <p className="mt-0.5 text-xs text-zinc-600">
                       <ExternalLink href={t.twitterUrl}>open on X ↗</ExternalLink>
                     </p>

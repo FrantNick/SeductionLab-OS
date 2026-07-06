@@ -42,6 +42,8 @@ export type ThreadWithLatest = {
   twitterUrl: string;
   twitterId: string;
   text: string;
+  threadName: string | null;
+  threadDescription: string | null;
   postedAt: Date;
   affiliateName: string;
   campaignName: string;
@@ -95,6 +97,8 @@ export async function getThreadsWithLatestMetrics(where?: {
       twitterUrl: t.twitterUrl,
       twitterId: t.twitterId,
       text: t.text,
+      threadName: t.threadName,
+      threadDescription: t.threadDescription,
       postedAt: t.postedAt,
       affiliateName: t.affiliate.displayName,
       campaignName: t.campaign.name,

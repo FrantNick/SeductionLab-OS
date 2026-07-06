@@ -20,6 +20,8 @@ export type LinkRow = {
   clicks: number;
   conversions: number;
   revenue: number;
+  /** planned thread name captured at creation (shown until a thread binds) */
+  plannedName: string | null;
   thread: { id: string; label: string } | null;
 };
 
@@ -50,6 +52,8 @@ export function TrackingLinksManager({
   const { copy } = useClipboard();
 
   const [campaignId, setCampaignId] = useState(campaigns[0]?.id ?? "");
+  const [threadName, setThreadName] = useState("");
+  const [threadDescription, setThreadDescription] = useState("");
   const [generating, setGenerating] = useState(false);
   const [search, setSearch] = useState("");
   const [filterCampaign, setFilterCampaign] = useState("all");
@@ -61,7 +65,13 @@ export function TrackingLinksManager({
     if (!campaignId) return;
     setGenerating(true);
     try {
-      const data = await api.post<{ url: string }>("/api/tracking/generate", { campaignId });
+      const data = await api.post<{ url: string }>("/api/tracking/generate", {
+        campaignId,
+        threadName: threadName.trim() || undefined,
+        threadDescription: threadDescription.trim() || undefined,
+      });
+      setThreadName("");
+      setThreadDescription("");
       await copy(data.url);
       toast({
         kind: "success",
@@ -98,6 +108,7 @@ export function TrackingLinksManager({
           l.slug.toLowerCase().includes(term) ||
           l.url.toLowerCase().includes(term) ||
           l.campaignName.toLowerCase().includes(term) ||
+          (l.plannedName?.toLowerCase().includes(term) ?? false) ||
           (l.thread?.label.toLowerCase().includes(term) ?? false),
       );
     }
@@ -139,32 +150,60 @@ export function TrackingLinksManager({
             You need an active campaign assignment before creating links.
           </p>
         ) : (
-          <div className="flex flex-wrap items-end gap-4">
-            <div className="min-w-56">
-              <label htmlFor="gen-campaign" className="mb-1.5 block text-xs font-medium text-zinc-400">
-                Campaign
-              </label>
-              <select
-                id="gen-campaign"
-                className="input"
-                value={campaignId}
-                onChange={(e) => setCampaignId(e.target.value)}
+          <div className="grid gap-4">
+            <div className="flex flex-wrap items-end gap-4">
+              <div className="min-w-56">
+                <label htmlFor="gen-campaign" className="mb-1.5 block text-xs font-medium text-zinc-400">
+                  Campaign
+                </label>
+                <select
+                  id="gen-campaign"
+                  className="input"
+                  value={campaignId}
+                  onChange={(e) => setCampaignId(e.target.value)}
+                >
+                  {campaigns.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="min-w-64 flex-1">
+                <label htmlFor="gen-name" className="mb-1.5 block text-xs font-medium text-zinc-400">
+                  Thread name (optional)
+                </label>
+                <input
+                  id="gen-name"
+                  className="input"
+                  placeholder="e.g. Pain exaggeration hook v2"
+                  maxLength={120}
+                  value={threadName}
+                  onChange={(e) => setThreadName(e.target.value)}
+                />
+              </div>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={generate}
+                disabled={generating || !campaignId}
               >
-                {campaigns.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+                {generating ? "Creating…" : "Create & copy"}
+              </button>
             </div>
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={generate}
-              disabled={generating || !campaignId}
-            >
-              {generating ? "Creating…" : "Create & copy"}
-            </button>
+            <div>
+              <label htmlFor="gen-desc" className="mb-1.5 block text-xs font-medium text-zinc-400">
+                Description (optional)
+              </label>
+              <textarea
+                id="gen-desc"
+                className="input min-h-16"
+                placeholder="Notes about the thread you plan to post with this link — carried onto the thread at submission."
+                maxLength={2000}
+                value={threadDescription}
+                onChange={(e) => setThreadDescription(e.target.value)}
+              />
+            </div>
           </div>
         )}
       </section>
@@ -255,6 +294,11 @@ export function TrackingLinksManager({
                     <tr key={link.id}>
                       <td>
                         <code className="text-xs text-ember-text">{link.slug}</code>
+                        {!link.thread && link.plannedName && (
+                          <p className="mt-0.5 max-w-40 truncate text-xs text-zinc-500">
+                            {link.plannedName}
+                          </p>
+                        )}
                       </td>
                       <td className="text-zinc-400">{link.campaignName}</td>
                       <td>

@@ -17,6 +17,9 @@ export type UnusedLink = {
   url: string;
   campaignId: string;
   createdAt: string | Date;
+  /** name/notes planned at link creation — prefill the submission fields */
+  threadName: string | null;
+  threadDescription: string | null;
 };
 
 /** Client-side mirror of the server's tweet-permalink validation. */
@@ -55,6 +58,9 @@ export function ThreadSubmitForm({
   const [campaignId, setCampaignId] = useState(campaigns[0]?.id ?? "");
   const [twitterUrl, setTwitterUrl] = useState("");
   const [trackingLinkId, setTrackingLinkId] = useState("");
+  const [threadName, setThreadName] = useState("");
+  const [threadDescription, setThreadDescription] = useState("");
+  const [metaTouched, setMetaTouched] = useState(false);
   const [touched, setTouched] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -67,6 +73,14 @@ export function ThreadSubmitForm({
   const selectedLinkId = campaignLinks.some((l) => l.id === trackingLinkId)
     ? trackingLinkId
     : (campaignLinks[0]?.id ?? "");
+  const selectedLink = campaignLinks.find((l) => l.id === selectedLinkId);
+
+  // Until the affiliate types their own name/notes, mirror what they
+  // planned when creating the selected link.
+  const effectiveName = metaTouched ? threadName : (selectedLink?.threadName ?? "");
+  const effectiveDescription = metaTouched
+    ? threadDescription
+    : (selectedLink?.threadDescription ?? "");
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -81,9 +95,14 @@ export function ThreadSubmitForm({
         campaignId,
         twitterUrl,
         trackingLinkId: selectedLinkId,
+        threadName: effectiveName.trim() || undefined,
+        threadDescription: effectiveDescription.trim() || undefined,
       });
       setTwitterUrl("");
       setTrackingLinkId("");
+      setThreadName("");
+      setThreadDescription("");
+      setMetaTouched(false);
       setTouched(false);
       if (data.initialScrape === "ok") {
         toast({ kind: "success", title: "Thread submitted", description: "Metrics scraped and link bound." });
@@ -158,11 +177,48 @@ export function ThreadSubmitForm({
             >
               {campaignLinks.map((l) => (
                 <option key={l.id} value={l.id}>
-                  {l.slug} — {l.url}
+                  {l.slug}
+                  {l.threadName ? ` — ${l.threadName}` : ""} — {l.url}
                 </option>
               ))}
             </select>
           )}
+        </div>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label htmlFor="thread-name" className="mb-1.5 block text-xs font-medium text-zinc-400">
+            Thread name (optional)
+          </label>
+          <input
+            id="thread-name"
+            className="input"
+            maxLength={120}
+            placeholder="e.g. Pain exaggeration hook v2"
+            value={effectiveName}
+            onChange={(e) => {
+              setMetaTouched(true);
+              setThreadName(e.target.value);
+              setThreadDescription(effectiveDescription);
+            }}
+          />
+        </div>
+        <div>
+          <label htmlFor="thread-desc" className="mb-1.5 block text-xs font-medium text-zinc-400">
+            Description (optional)
+          </label>
+          <textarea
+            id="thread-desc"
+            className="input min-h-[42px]"
+            maxLength={2000}
+            placeholder="Notes about this thread…"
+            value={effectiveDescription}
+            onChange={(e) => {
+              setMetaTouched(true);
+              setThreadDescription(e.target.value);
+              setThreadName(effectiveName);
+            }}
+          />
         </div>
       </div>
       <div>

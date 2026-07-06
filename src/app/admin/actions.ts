@@ -68,6 +68,62 @@ export async function setProductArchived(productId: string, archived: boolean) {
   revalidatePath("/admin/products");
 }
 
+// ── Per-affiliate product destination overrides ──────────────────────
+
+/**
+ * Sets (or, with an empty input, clears) an affiliate's custom destination
+ * URL for a product. When set, /go/{slug} redirects to it VERBATIM —
+ * no automatic parameter building; clearing reverts to the automatic
+ * landing-URL builder.
+ */
+export async function saveAffiliateProductUrl(
+  productId: string,
+  affiliateId: string,
+  formData: FormData,
+) {
+  const session = await requireAdmin();
+  const raw = String(formData.get("destinationUrl") ?? "").trim();
+
+  if (!raw) {
+    await prisma.affiliateProductUrl.deleteMany({ where: { affiliateId, productId } });
+    await logAudit({
+      userId: session.user.id,
+      action: "product.affiliate_url_cleared",
+      entityType: "product",
+      entityId: productId,
+      metadata: { affiliateId },
+    });
+  } else {
+    const destinationUrl = z.string().url("Enter a full URL, starting with https://").parse(raw);
+    await prisma.affiliateProductUrl.upsert({
+      where: { affiliateId_productId: { affiliateId, productId } },
+      create: { affiliateId, productId, destinationUrl },
+      update: { destinationUrl },
+    });
+    await logAudit({
+      userId: session.user.id,
+      action: "product.affiliate_url_set",
+      entityType: "product",
+      entityId: productId,
+      metadata: { affiliateId, destinationUrl },
+    });
+  }
+  revalidatePath(`/admin/products/${productId}`);
+}
+
+export async function clearAffiliateProductUrl(productId: string, affiliateId: string) {
+  const session = await requireAdmin();
+  await prisma.affiliateProductUrl.deleteMany({ where: { affiliateId, productId } });
+  await logAudit({
+    userId: session.user.id,
+    action: "product.affiliate_url_cleared",
+    entityType: "product",
+    entityId: productId,
+    metadata: { affiliateId },
+  });
+  revalidatePath(`/admin/products/${productId}`);
+}
+
 // ── Campaigns ────────────────────────────────────────────────────────
 
 const campaignSchema = z.object({

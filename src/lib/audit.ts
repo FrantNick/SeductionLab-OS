@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 
 export type AuditAction =
-  | `product.${"created" | "updated" | "archived" | "restored"}`
+  | `product.${"created" | "updated" | "archived" | "restored" | "affiliate_url_set" | "affiliate_url_cleared"}`
   | `campaign.${"created" | "updated" | "status_changed"}`
   | `assignment.${"created" | "status_changed"}`
   | `affiliate.${"status_changed" | "settings_changed"}`

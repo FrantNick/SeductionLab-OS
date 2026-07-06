@@ -35,6 +35,21 @@ export function formatDateTime(d: Date | string | null | undefined): string {
   });
 }
 
+/**
+ * Display label for a thread: affiliate-chosen name → scraped text
+ * excerpt → tweet id. One helper so every list renders threads the same.
+ */
+export function threadLabel(
+  thread: { threadName?: string | null; text: string; twitterId: string },
+  maxLength = 48,
+): string {
+  const source = thread.threadName || thread.text;
+  if (source) {
+    return source.length > maxLength ? `${source.slice(0, maxLength)}…` : source;
+  }
+  return `Tweet ${thread.twitterId}`;
+}
+
 export function timeAgo(d: Date | string | null | undefined): string {
   if (!d) return "never";
   const seconds = Math.floor((Date.now() - new Date(d).getTime()) / 1000);

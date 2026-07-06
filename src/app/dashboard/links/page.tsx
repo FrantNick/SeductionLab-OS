@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { trackingBaseUrl } from "@/lib/tracking";
 import { getConversionsByLink } from "@/lib/analytics";
+import { threadLabel } from "@/lib/format";
 import { PageHeader } from "@/components/ui";
 import { TrackingLinksManager } from "@/components/tracking-links-manager";
 
@@ -18,7 +19,7 @@ export default async function TrackingLinksPage() {
       where: { affiliateId },
       include: {
         campaign: { select: { name: true } },
-        thread: { select: { id: true, text: true, twitterId: true } },
+        thread: { select: { id: true, text: true, twitterId: true, threadName: true } },
         _count: { select: { clicks: true } },
       },
       orderBy: { createdAt: "desc" },
@@ -53,14 +54,8 @@ export default async function TrackingLinksPage() {
             clicks: l._count.clicks,
             conversions: conv?.count ?? 0,
             revenue: conv?.revenue ?? 0,
-            thread: l.thread
-              ? {
-                  id: l.thread.id,
-                  label: l.thread.text
-                    ? `${l.thread.text.slice(0, 60)}${l.thread.text.length > 60 ? "…" : ""}`
-                    : `Tweet ${l.thread.twitterId}`,
-                }
-              : null,
+            plannedName: l.threadName,
+            thread: l.thread ? { id: l.thread.id, label: threadLabel(l.thread, 60) } : null,
           };
         })}
         campaigns={assignments.map((a) => ({ id: a.campaign.id, name: a.campaign.name }))}

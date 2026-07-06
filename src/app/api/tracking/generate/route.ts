@@ -8,6 +8,9 @@ import { buildAffiliateDestination, fullTrackingUrl, generateSlug } from "@/lib/
 const generateSchema = z.object({
   campaignId: z.string().min(1, "campaignId is required"),
   productId: z.string().min(1).optional(),
+  // planned-thread metadata — copied to the Thread at submission time
+  threadName: z.string().trim().max(120).optional(),
+  threadDescription: z.string().trim().max(2000).optional(),
 });
 
 /**
@@ -18,7 +21,9 @@ const generateSchema = z.object({
  */
 export const POST = withErrorHandling(async (req: NextRequest) => {
   const { affiliateId } = await requireAffiliate();
-  const { campaignId, productId } = generateSchema.parse(await req.json());
+  const { campaignId, productId, threadName, threadDescription } = generateSchema.parse(
+    await req.json(),
+  );
 
   const assignment = await prisma.campaignAssignment.findUnique({
     where: { campaignId_affiliateId: { campaignId, affiliateId } },
@@ -47,6 +52,8 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
       campaignId,
       productId: resolvedProductId,
       slug,
+      threadName: threadName || null,
+      threadDescription: threadDescription || null,
       // snapshot of the landing destination; /go recomputes it live so
       // later product/setting changes reach existing links too
       destinationUrl: await buildAffiliateDestination({

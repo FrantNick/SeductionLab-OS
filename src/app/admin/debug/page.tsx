@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { apifyEnabled } from "@/lib/apify";
+import { getSetting } from "@/lib/app-settings";
 import { getJobStatus } from "@/lib/job-runs";
 import { trackingBaseUrl } from "@/lib/tracking";
 import { formatDateTime, formatNumber, timeAgo } from "@/lib/format";
@@ -70,7 +71,10 @@ export default async function AdminDebugPage() {
     }),
   ]);
   const dbLatencyMs = Date.now() - dbStart;
-  const linkBase = await trackingBaseUrl();
+  const [linkBase, botFilterMinutes] = await Promise.all([
+    trackingBaseUrl(),
+    getSetting("tracking.botFilterMinutes").then((v) => Number(v) || 0),
+  ]);
 
   const [
     users, affiliateCount, campaignCount, threads, metrics, links, clicks,
@@ -172,6 +176,12 @@ export default async function AdminDebugPage() {
             <div className="flex items-center justify-between rounded-lg border border-ink-700 bg-ink-900 px-3 py-2">
               <span className="text-sm text-zinc-300">Database round-trip</span>
               <span className="num text-xs text-zinc-400">{dbLatencyMs}ms</span>
+            </div>
+            <div className="flex items-center justify-between rounded-lg border border-ink-700 bg-ink-900 px-3 py-2">
+              <span className="text-sm text-zinc-300">Bot filter window</span>
+              <span className="num text-xs text-zinc-400">
+                {botFilterMinutes > 0 ? `${botFilterMinutes} min` : "disabled"}
+              </span>
             </div>
             {providers.map((p) => (
               <div

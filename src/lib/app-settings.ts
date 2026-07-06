@@ -15,6 +15,10 @@ export const SETTING_DEFS = {
   // code changes. Applied at redirect time, so edits affect every link.
   "tracking.affiliateParam": { label: "Affiliate parameter name", default: "affiliate" },
   "tracking.trackingParam": { label: "Tracking parameter name", default: "ref" },
+  // X's link-preview bots hammer fresh tracking links right after a thread
+  // goes up; clicks inside this window after thread submission are not
+  // logged (the visitor is still redirected). 0 disables the filter.
+  "tracking.botFilterMinutes": { label: "Bot filter window (minutes)", default: 10 },
   "defaults.currency": { label: "Currency", default: "USD" },
   "defaults.leaderboardSize": { label: "Leaderboard size", default: 50 },
   "defaults.metricsRefreshHours": { label: "Metrics refresh cadence (hours)", default: 6 },

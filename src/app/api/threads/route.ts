@@ -10,6 +10,8 @@ const submitSchema = z.object({
   campaignId: z.string().min(1, "campaignId is required"),
   twitterUrl: z.string().url("A valid tweet URL is required"),
   trackingLinkId: z.string().min(1, "trackingLinkId is required"),
+  threadName: z.string().trim().max(120).optional(),
+  threadDescription: z.string().trim().max(2000).optional(),
 });
 
 /**
@@ -21,7 +23,8 @@ const submitSchema = z.object({
  */
 export const POST = withErrorHandling(async (req: NextRequest) => {
   const { affiliateId } = await requireAffiliate();
-  const { campaignId, twitterUrl, trackingLinkId } = submitSchema.parse(await req.json());
+  const { campaignId, twitterUrl, trackingLinkId, threadName, threadDescription } =
+    submitSchema.parse(await req.json());
 
   const twitterId = parseTweetId(twitterUrl);
   if (!twitterId) {
@@ -61,6 +64,10 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
         campaignId,
         twitterUrl: normalizeTweetUrl(twitterUrl),
         twitterId,
+        // submission values win; otherwise inherit what the affiliate
+        // planned when creating the tracking link
+        threadName: threadName || link.threadName || null,
+        threadDescription: threadDescription || link.threadDescription || null,
       },
     });
     const bound = await tx.trackingLink.updateMany({

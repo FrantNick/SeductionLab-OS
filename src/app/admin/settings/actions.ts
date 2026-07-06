@@ -13,7 +13,15 @@ export async function saveAppSettings(formData: FormData) {
     const raw = formData.get(key);
     if (raw === null) continue;
     const def = SETTING_DEFS[key];
-    const value = typeof def.default === "number" ? Number(raw) || def.default : String(raw);
+    let value: string | number;
+    if (typeof def.default === "number") {
+      // Number(raw) || default would turn a legitimate 0 (e.g. "disable
+      // the bot filter") back into the default — parse explicitly instead.
+      const parsed = Number(raw);
+      value = String(raw).trim() !== "" && Number.isFinite(parsed) ? parsed : def.default;
+    } else {
+      value = String(raw);
+    }
     await setSetting(key, value);
   }
 

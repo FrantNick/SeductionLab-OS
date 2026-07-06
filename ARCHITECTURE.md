@@ -61,6 +61,14 @@ Product (landingUrl)
 - `Affiliate.handle` is the unique URL-safe identifier carried by the
   affiliate parameter (auto-slugified from displayName at signup, backfilled
   by migration, id fallback when null).
+- `AffiliateProductUrl` (unique per affiliate × product) is an admin-set
+  destination override used verbatim by the redirect — for affiliates who
+  need a hand-crafted URL on a given product without touching the automatic
+  builder everyone else uses.
+- Threads and links carry optional `threadName`/`threadDescription`
+  (planned on the link, inherited at submission, editable after);
+  `Thread.createdAt` records platform submission time and anchors the
+  bot-filter window (`postedAt` remains free to hold the real tweet time).
 
 - **One link per thread.** Affiliates create unlimited `TrackingLink`s inside
   a campaign — one before each thread they post. `TrackingLink.threadId` is
@@ -97,9 +105,14 @@ Product (landingUrl)
                  └─ transaction: create Thread + bind link (threadId ← thread.id)
 
 GET /go/{slug}
-  ├─ resolve TrackingLink (slug unique) + product.landingUrl + affiliate.handle
+  ├─ resolve TrackingLink (slug unique) + product + affiliate + thread.createdAt
+  ├─ bot filter: thread bound AND now − thread.createdAt < tracking.botFilterMinutes?
+  │     yes → skip click logging (visitor still redirected; 0 disables)
   ├─ INSERT Click { sha256(salt + ip), userAgent, country?, full attribution }
-  └─ 302 → landingUrl?{affiliateParam}={handle}&{trackingParam}={slug}
+  └─ 302 → destination, resolved in order:
+       1. AffiliateProductUrl(affiliateId, productId).destinationUrl  — verbatim
+       2. landingUrl?{affiliateParam}={handle}&{trackingParam}={slug} — automatic
+       3. link.destinationUrl snapshot                                — last resort
 ```
 
 The destination is **built at redirect time** from the product's landing URL

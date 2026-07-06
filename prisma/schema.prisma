@@ -70,6 +70,7 @@ model Affiliate {
   leaderboardEntries    LeaderboardEntry[]
   experimentAssignments ExperimentAssignment[]
   wonExperiments        Experiment[]           @relation("ExperimentWinner")
+  productUrls           AffiliateProductUrl[]
 
   @@index([status])
 }
@@ -89,6 +90,7 @@ model Product {
   trackingLinks TrackingLink[]
   conversions   Conversion[]
   experiments   Experiment[]
+  affiliateUrls AffiliateProductUrl[]
 }
 
 model Campaign {
@@ -123,7 +125,13 @@ model Thread {
   twitterUrl  String
   twitterId   String
   text        String   @default("")
+  // affiliate-facing label + notes; null = fall back to text/tweet id
+  threadName        String?
+  threadDescription String?
   postedAt    DateTime @default(now())
+  // platform submission time (distinct from postedAt, which may later hold
+  // the actual tweet timestamp) — anchors the bot-click filter window
+  createdAt   DateTime @default(now())
 
   affiliate    Affiliate       @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
   campaign     Campaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
@@ -164,6 +172,10 @@ model TrackingLink {
   threadId       String?  @unique
   slug           String   @unique
   destinationUrl String
+  // planned-thread metadata captured at link creation, copied onto the
+  // Thread when it is submitted with this link (submission values win)
+  threadName        String?
+  threadDescription String?
   createdAt      DateTime @default(now())
 
   affiliate Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
@@ -214,6 +226,23 @@ model Conversion {
 
   @@index([affiliateId, createdAt])
   @@index([campaignId, createdAt])
+}
+
+// Admin-managed per-affiliate destination override for a product. When a
+// row exists, /go/{slug} redirects to destinationUrl VERBATIM (no automatic
+// parameter building); without one, the automatic landing-URL builder runs.
+model AffiliateProductUrl {
+  id             String   @id @default(cuid())
+  affiliateId    String
+  productId      String
+  destinationUrl String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  affiliate Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([affiliateId, productId])
 }
 
 model CampaignAssignment {

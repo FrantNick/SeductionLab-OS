@@ -12,7 +12,7 @@ import {
 import { getAffiliateRank, getLeaderboard } from "@/lib/leaderboard";
 import { getNotifications } from "@/lib/notifications";
 import { isFlagEnabled } from "@/lib/feature-flags";
-import { formatMoney, formatNumber, formatPercent, formatDate, timeAgo } from "@/lib/format";
+import { formatMoney, formatNumber, formatPercent, formatDate, threadLabel, timeAgo } from "@/lib/format";
 import { Badge, Card, EmptyState, InternalLink, PageHeader } from "@/components/ui";
 import { TimeSeriesChart } from "@/components/charts";
 import { LeaderboardTable } from "@/components/leaderboard-table";
@@ -293,9 +293,7 @@ export default async function DashboardPage() {
               {bestThreads.map((t) => (
                 <tr key={t.id}>
                   <td>
-                    <InternalLink href={`/dashboard/threads/${t.id}`}>
-                      {t.text ? `${t.text.slice(0, 48)}${t.text.length > 48 ? "…" : ""}` : `Tweet ${t.twitterId}`}
-                    </InternalLink>
+                    <InternalLink href={`/dashboard/threads/${t.id}`}>{threadLabel(t)}</InternalLink>
                   </td>
                   <td className="text-zinc-400">{t.campaignName}</td>
                   <td className="num text-right">{formatNumber(t.views)}</td>

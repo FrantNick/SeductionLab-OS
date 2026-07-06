@@ -80,10 +80,14 @@ computed per thread from its own link's clicks.
 
 ### Public
 - `GET /go/[slug]` — logs a Click (salted-hash IP, user agent, country) and
-  302-redirects to the product landing page with the affiliate handle and
-  link slug appended (parameter names configurable under Settings →
-  Affiliate tracking; the destination is computed at redirect time, so
-  product/setting changes reach every existing link).
+  302-redirects. Destination order: per-affiliate override
+  (`AffiliateProductUrl`, admin-set, used verbatim) → the product landing
+  page with the affiliate handle and link slug appended (parameter names
+  configurable under Settings → Affiliate tracking) → stored snapshot.
+  Computed at redirect time, so product/setting/override changes reach
+  every existing link. Clicks within `tracking.botFilterMinutes` of the
+  linked thread's submission are not logged (X preview bots; visitors are
+  always redirected; 0 disables).
 - `/login`, `/register` — Auth.js credentials; self-registration always
   creates an AFFILIATE. Admins are seeded.
 
@@ -118,9 +122,10 @@ computed per thread from its own link's clicks.
 ### API
 | Route | Auth | Purpose |
 |---|---|---|
-| `POST /api/tracking/generate` | affiliate | `{campaignId}` → NEW `/go/{slug}` link every call (one per planned thread) |
+| `POST /api/tracking/generate` | affiliate | `{campaignId, threadName?, threadDescription?}` → NEW `/go/{slug}` link every call (one per planned thread) |
 | `DELETE /api/tracking/[id]` | affiliate | delete own link — only if unused (no thread, no clicks) |
-| `POST /api/threads` | affiliate | `{campaignId, twitterUrl, trackingLinkId}` → Thread bound 1:1 to the link (+ initial Apify scrape) |
+| `POST /api/threads` | affiliate | `{campaignId, twitterUrl, trackingLinkId, threadName?, threadDescription?}` → Thread bound 1:1 to the link (+ initial Apify scrape) |
+| `PATCH /api/threads/[id]` | affiliate | edit own thread's name/description |
 | `POST /api/threads/[id]/link` | affiliate | bind an unused link to a pre-migration thread that has none |
 | `GET /api/threads` | affiliate | own threads with latest metrics + bound link |
 | `POST /api/apify/scrape-thread` | owner/admin | `{threadId}` → new ThreadMetrics snapshot |

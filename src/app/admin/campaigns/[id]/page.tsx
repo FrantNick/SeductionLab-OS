@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getLeaderboard } from "@/lib/leaderboard";
 import { getConversionsByLink, getThreadsWithLatestMetrics } from "@/lib/analytics";
 import { trackingBaseUrl } from "@/lib/tracking";
-import { formatMoney, formatNumber, formatPercent, timeAgo } from "@/lib/format";
+import { formatMoney, formatNumber, formatPercent, threadLabel, timeAgo } from "@/lib/format";
 import { Badge, Card, EmptyState, InternalLink, PageHeader } from "@/components/ui";
 import { CopyButton } from "@/components/copy-button";
 import {
@@ -17,10 +17,13 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminCampaignDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ tq?: string }>;
 }) {
   const { id } = await params;
+  const { tq = "" } = await searchParams;
 
   const campaign = await prisma.campaign.findUnique({
     where: { id },
@@ -46,7 +49,7 @@ export default async function AdminCampaignDetailPage({
       where: { campaignId: id },
       include: {
         affiliate: { select: { displayName: true } },
-        thread: { select: { id: true, text: true, twitterId: true } },
+        thread: { select: { id: true, text: true, twitterId: true, threadName: true } },
         _count: { select: { clicks: true } },
       },
       orderBy: { createdAt: "desc" },
@@ -57,6 +60,17 @@ export default async function AdminCampaignDetailPage({
     trackingBaseUrl(),
   ]);
   const linkedCount = trackingLinks.filter((l) => l.threadId).length;
+
+  // admin thread search: name, description and scraped text
+  const term = tq.trim().toLowerCase();
+  const visibleThreads = term
+    ? threads.filter(
+        (t) =>
+          (t.threadName?.toLowerCase().includes(term) ?? false) ||
+          (t.threadDescription?.toLowerCase().includes(term) ?? false) ||
+          t.text.toLowerCase().includes(term),
+      )
+    : threads;
 
   const dateValue = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : "");
 
@@ -289,12 +303,12 @@ export default async function AdminCampaignDetailPage({
                     <td className="max-w-52">
                       {link.thread ? (
                         <InternalLink href={`/dashboard/threads/${link.thread.id}`}>
-                          {link.thread.text
-                            ? `${link.thread.text.slice(0, 40)}${link.thread.text.length > 40 ? "…" : ""}`
-                            : `Tweet ${link.thread.twitterId}`}
+                          {threadLabel(link.thread, 40)}
                         </InternalLink>
                       ) : (
-                        <span className="text-xs text-zinc-600">unused</span>
+                        <span className="text-xs text-zinc-600">
+                          unused{link.threadName ? ` · planned: ${link.threadName}` : ""}
+                        </span>
                       )}
                     </td>
                     <td className="num text-right font-medium text-zinc-200">
@@ -311,9 +325,30 @@ export default async function AdminCampaignDetailPage({
         )}
       </Card>
 
-      <Card title="Threads in this campaign" className="mt-6" padded={false}>
-        {threads.length === 0 ? (
-          <EmptyState title="No threads submitted yet" />
+      <Card
+        title="Threads in this campaign"
+        className="mt-6"
+        padded={false}
+        action={
+          <form method="GET" className="flex items-center gap-2">
+            <input
+              name="tq"
+              className="input w-56 py-1.5 text-xs"
+              placeholder="Search by thread name…"
+              defaultValue={tq}
+              aria-label="Search threads by name"
+            />
+            <button type="submit" className="btn-ghost">
+              Search
+            </button>
+          </form>
+        }
+      >
+        {visibleThreads.length === 0 ? (
+          <EmptyState
+            title={tq ? "No threads match that name" : "No threads submitted yet"}
+            hint={tq ? "Search matches thread name, description and text." : undefined}
+          />
         ) : (
           <table className="table-base">
             <thead>
@@ -329,12 +364,16 @@ export default async function AdminCampaignDetailPage({
               </tr>
             </thead>
             <tbody>
-              {threads.map((t) => (
+              {visibleThreads.map((t) => (
                 <tr key={t.id}>
-                  <td>
-                    <InternalLink href={`/dashboard/threads/${t.id}`}>
-                      {t.text ? `${t.text.slice(0, 48)}${t.text.length > 48 ? "…" : ""}` : `Tweet ${t.twitterId}`}
-                    </InternalLink>
+                  <td className="max-w-xs">
+                    <InternalLink href={`/dashboard/threads/${t.id}`}>{threadLabel(t)}</InternalLink>
+                    {(t.threadDescription || (t.threadName && t.text)) && (
+                      <p className="mt-0.5 truncate text-xs text-zinc-500">
+                        {(t.threadDescription ?? t.text).slice(0, 70)}
+                        {(t.threadDescription ?? t.text).length > 70 ? "…" : ""}
+                      </p>
+                    )}
                   </td>
                   <td className="text-zinc-400">{t.affiliateName}</td>
                   <td>

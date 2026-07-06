@@ -131,6 +131,24 @@ export default async function AdminSettingsPage() {
                   Leave empty to append only the affiliate parameter.
                 </p>
               </div>
+              <div className="sm:col-span-2">
+                <label className="mb-1.5 block text-xs font-medium text-zinc-400">
+                  Bot filter window (minutes)
+                </label>
+                <input
+                  name="tracking.botFilterMinutes"
+                  type="number"
+                  min={0}
+                  max={1440}
+                  className="input num w-40"
+                  defaultValue={Number(settings["tracking.botFilterMinutes"])}
+                />
+                <p className="mt-1 text-xs text-zinc-500">
+                  Clicks arriving within this window after a thread is submitted are not logged
+                  (X&apos;s preview bots hit fresh links immediately). Visitors are still
+                  redirected. Set 0 to disable.
+                </p>
+              </div>
               <button type="submit" className="btn-primary w-fit sm:col-span-2">
                 Save tracking parameters
               </button>

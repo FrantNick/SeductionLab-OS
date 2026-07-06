@@ -164,7 +164,8 @@ Migrations are additive; V2 never altered V1 semantics.
 | `POST /api/register` | public | affiliate self-signup |
 | `POST /api/tracking/generate` | affiliate | creates a NEW link every call — one per planned thread |
 | `DELETE /api/tracking/[id]` | affiliate | delete own link, only while unused (no thread, no clicks) |
-| `GET/POST /api/threads` | affiliate | list / submit threads — POST requires `trackingLinkId` (unused, same campaign) and binds it 1:1 |
+| `GET/POST /api/threads` | affiliate | list / submit threads — POST requires `trackingLinkId` (unused, same campaign) and binds it 1:1; optional `threadName`/`threadDescription` |
+| `PATCH /api/threads/[id]` | affiliate | edit own thread's name/description |
 | `POST /api/threads/[id]/link` | affiliate | bind an unused link to a legacy thread that has none |
 | `POST /api/apify/scrape-thread` | owner/admin | manual metrics refresh for one thread |
 | `POST /api/conversions/manual` | admin | manual revenue entry |
@@ -200,9 +201,24 @@ generation, plus affiliate profile/password/notification-prefs updates.
    dropdown offering only their unused links from that campaign) → the link is
    bound to the thread permanently (unique `threadId`, race-safe consume).
 
+Links (and the threads submitted with them) can carry an affiliate-chosen
+**name and description**: set optionally at link creation (stored on the
+link), inherited by the thread at submission (submission values win), and
+editable afterwards from the thread detail page (`PATCH /api/threads/[id]`).
+Lists everywhere render `threadLabel()` — name → text excerpt → tweet id.
+
 `/go/{slug}` logs a Click with salted SHA-256 IP hash (never raw IPs), UA and
-geo country header if the host provides it → 302 to the **product landing
-page** with the affiliate handle and link slug appended, e.g.
+geo country header if the host provides it. **Bot filter:** clicks arriving
+within `tracking.botFilterMinutes` (default 10, 0 disables) of the linked
+thread's submission (`Thread.createdAt`) are NOT logged — X's preview bots
+hammer fresh links; the visitor is still redirected. Then → 302 to the
+destination, resolved in this order:
+
+1. **`AffiliateProductUrl` override** (admin-set per affiliate × product
+   under Admin → Products → product → "Affiliate destination URLs") — used
+   VERBATIM, no parameter building;
+2. otherwise the automatic build: the **product landing
+   page** with the affiliate handle and link slug appended, e.g.
 `https://…/products/the-story-method?affiliate=maya-writes&ref=a8dj21`.
 The landing page is identical for every affiliate; its JS reads the affiliate
 param and swaps the CTA to that affiliate's checkout. Parameter names are

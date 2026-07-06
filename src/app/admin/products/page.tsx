@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { formatMoney, formatPercent } from "@/lib/format";
 import { Badge, Card, EmptyState, ExternalLink, InternalLink, PageHeader } from "@/components/ui";
@@ -98,7 +99,7 @@ export default async function AdminProductsPage() {
                 return (
                   <tr key={p.id} className={archived ? "opacity-60" : ""}>
                     <td>
-                      <p className="font-medium text-zinc-200">{p.name}</p>
+                      <InternalLink href={`/admin/products/${p.id}`}>{p.name}</InternalLink>
                       <p className="max-w-xs truncate text-xs">
                         <ExternalLink href={p.landingUrl}>{p.landingUrl}</ExternalLink>
                       </p>
@@ -147,6 +148,9 @@ export default async function AdminProductsPage() {
                       {formatMoney(conv.revenue)}
                     </td>
                     <td className="text-right">
+                      <Link href={`/admin/products/${p.id}`} className="btn-ghost">
+                        Affiliate URLs
+                      </Link>
                       {archived ? (
                         <form action={setProductArchived.bind(null, p.id, false)}>
                           <button className="btn-ghost">Restore</button>

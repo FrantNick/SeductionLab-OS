@@ -1,5 +1,5 @@
 import { getAffiliatePerformance, getCampaignStats, getTopThreads } from "@/lib/analytics";
-import { formatMoney, formatNumber, formatPercent } from "@/lib/format";
+import { formatMoney, formatNumber, formatPercent, threadLabel } from "@/lib/format";
 import { Card, EmptyState, ExternalLink, InternalLink, PageHeader } from "@/components/ui";
 import { CategoryBarChart } from "@/components/charts";
 
@@ -140,7 +140,7 @@ export default async function AdminAnalyticsPage() {
                       <span className="num text-sm font-semibold text-zinc-500">#{i + 1}</span>
                       <div className="min-w-0 flex-1">
                         <InternalLink href={`/dashboard/threads/${t.id}`}>
-                          {t.text ? `${t.text.slice(0, 40)}${t.text.length > 40 ? "…" : ""}` : `Tweet ${t.twitterId}`}
+                          {threadLabel(t, 40)}
                         </InternalLink>
                         <p className="mt-0.5 truncate text-xs text-zinc-500">
                           {t.affiliateName} · {t.campaignName} ·{" "}

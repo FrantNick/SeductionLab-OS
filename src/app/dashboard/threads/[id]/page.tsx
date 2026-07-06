@@ -4,12 +4,14 @@ import { prisma } from "@/lib/prisma";
 import { apifyEnabled } from "@/lib/apify";
 import { getConversionsByLink } from "@/lib/analytics";
 import { trackingBaseUrl } from "@/lib/tracking";
+import { getSetting } from "@/lib/app-settings";
 import { formatDateTime, formatMoney, formatNumber, formatPercent } from "@/lib/format";
 import { Card, EmptyState, ExternalLink, PageHeader, StatCard } from "@/components/ui";
 import { EngagementLineChart, ViewsLineChart } from "@/components/charts";
 import { ScrapeButton } from "@/components/scrape-button";
 import { CopyButton } from "@/components/copy-button";
 import { LinkThreadForm } from "@/components/link-thread-form";
+import { ThreadMetaForm } from "@/components/thread-meta-form";
 
 export const dynamic = "force-dynamic";
 
@@ -53,6 +55,7 @@ export default async function ThreadDetailPage({
       : Promise.resolve([]),
     trackingBaseUrl(),
   ]);
+  const botFilterMinutes = Number(await getSetting("tracking.botFilterMinutes")) || 0;
   const linkConv = thread.trackingLink
     ? (convByLink.get(thread.trackingLink.id) ?? { count: 0, revenue: 0 })
     : { count: 0, revenue: 0 };
@@ -71,20 +74,37 @@ export default async function ThreadDetailPage({
   return (
     <>
       <PageHeader
-        title="Thread detail"
+        title={thread.threadName || "Thread detail"}
         subtitle={`${thread.campaign.name} · by ${thread.affiliate.displayName}`}
         action={(await apifyEnabled()) ? <ScrapeButton threadId={thread.id} twitterUrl={thread.twitterUrl} /> : undefined}
       />
 
       <Card>
+        {thread.threadDescription && (
+          <p className="mb-3 whitespace-pre-line rounded-lg border border-ink-700 bg-ink-900 px-3 py-2 text-sm text-zinc-400">
+            {thread.threadDescription}
+          </p>
+        )}
         <p className="whitespace-pre-line text-sm leading-relaxed text-zinc-300">
           {thread.text || "Thread text will appear after the first successful scrape."}
         </p>
         <p className="mt-3 text-xs text-zinc-500">
           <ExternalLink href={thread.twitterUrl}>{thread.twitterUrl}</ExternalLink> · submitted{" "}
-          {formatDateTime(thread.postedAt)}
+          {formatDateTime(thread.createdAt)}
+          {botFilterMinutes > 0 &&
+            ` · clicks in the first ${botFilterMinutes} minutes after submission are excluded from analytics (bot filter)`}
         </p>
       </Card>
+
+      {isOwner && (
+        <Card title="Name & notes" className="mt-6">
+          <ThreadMetaForm
+            threadId={thread.id}
+            initialName={thread.threadName}
+            initialDescription={thread.threadDescription}
+          />
+        </Card>
+      )}
 
       {/* Exact link attribution: Click → TrackingLink → this thread */}
       {thread.trackingLink ? (
