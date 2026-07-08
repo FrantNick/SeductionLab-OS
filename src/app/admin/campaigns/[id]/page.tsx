@@ -125,7 +125,7 @@ export default async function AdminCampaignDetailPage({
                 defaultValue={campaign.instructions}
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-zinc-400">Example hook</label>
                 <input name="exampleHook" className="input" defaultValue={campaign.exampleHook} />
@@ -135,7 +135,7 @@ export default async function AdminCampaignDetailPage({
                 <input name="exampleCTA" className="input" defaultValue={campaign.exampleCTA} />
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid gap-4 sm:grid-cols-3">
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-zinc-400">Status</label>
                 <select name="status" className="input" defaultValue={campaign.status}>

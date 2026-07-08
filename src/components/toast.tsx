@@ -29,12 +29,13 @@ export function useToast() {
   return ctx;
 }
 
-// solid brutalist toasts: colored slab, white text, hard shadow
+// solid brutalist toasts: colored slab, white text, hard shadow.
+// Fixed colors on purpose — a toast reads identically in both themes.
 const KIND_STYLES: Record<ToastKind, { surface: string; icon: string }> = {
-  success: { surface: "bg-pos", icon: "✓" },
-  warning: { surface: "bg-rust", icon: "!" },
-  error: { surface: "bg-rust", icon: "✕" },
-  info: { surface: "bg-ink", icon: "i" },
+  success: { surface: "bg-[#2F6E4F]", icon: "✓" },
+  warning: { surface: "bg-[#C75230]", icon: "!" },
+  error: { surface: "bg-[#C75230]", icon: "✕" },
+  info: { surface: "bg-[#26201B]", icon: "i" },
 };
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
@@ -62,7 +63,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       {children}
       <div
         aria-live="polite"
-        className="pointer-events-none fixed bottom-4 right-4 z-50 flex w-80 flex-col gap-2"
+        className="pointer-events-none fixed bottom-4 right-4 z-50 flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2"
       >
         {toasts.map((t) => {
           const style = KIND_STYLES[t.kind];

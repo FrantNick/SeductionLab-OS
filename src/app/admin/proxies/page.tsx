@@ -117,7 +117,7 @@ export default async function AdminProxiesPage() {
         {/* Add route */}
         <Card title="Add route">
           <form action={createProxy} className="grid gap-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-zinc-400">Name</label>
                 <input name="name" className="input" required placeholder="EU residential 1" />
@@ -129,7 +129,7 @@ export default async function AdminProxiesPage() {
                 <input name="provider" className="input" placeholder="vendor name" />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-zinc-400">Kind</label>
                 <select name="kind" className="input" defaultValue="DATACENTER">
@@ -147,7 +147,7 @@ export default async function AdminProxiesPage() {
                 </select>
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid gap-4 sm:grid-cols-3">
               <div className="col-span-2">
                 <label className="mb-1.5 block text-xs font-medium text-zinc-400">Host</label>
                 <input name="host" className="input" required placeholder="proxy.example.com" />
@@ -157,7 +157,7 @@ export default async function AdminProxiesPage() {
                 <input name="port" type="number" min={1} max={65535} className="input num" required />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-zinc-400">Username</label>
                 <input name="username" className="input" autoComplete="off" />

@@ -69,7 +69,7 @@ export default async function AdminCampaignsPage() {
                 <option value="COMPLETED">Completed</option>
               </select>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-zinc-400">Start date</label>
                 <input name="startDate" type="date" className="input" />

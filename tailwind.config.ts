@@ -5,63 +5,69 @@ import type { Config } from "tailwindcss";
  * productivity tool. Light warm backgrounds, warm near-black ink,
  * rust accent, hard paper-cut shadows, no gradients or blurs.
  *
- * The `ink`, `ember` and `zinc` scales are REMAPPED from the previous
- * dark theme so the hundreds of existing utility classes restyle
+ * Every color reads a CSS variable (RGB triples defined in globals.css:
+ * `:root` = light, `.dark` = the dark variant), so the whole app
+ * re-themes at runtime from the sidebar toggle.
+ *
+ * The `ink`, `ember` and `zinc` scales are REMAPPED from the original
+ * dark-SaaS theme so the hundreds of existing utility classes restyle
  * globally while keeping their visual hierarchy:
- *   ink-950…600  dark surfaces → warm light surfaces (950 = page paper)
- *   ember        orange accent → rust
- *   zinc-100…600 light-on-dark text → dark-on-light ink tints
+ *   ink-950…600  surfaces (950 = page paper, 600 = strong border)
+ *   ember        accent → rust
+ *   zinc-100…600 text hierarchy (lower = more prominent)
  * Status hues (emerald/red/amber/sky) map onto the pos/neg palette.
  */
-const INK = "#1C1714";
+const v = (name: string) => `rgb(var(--${name}) / <alpha-value>)`;
+const vt = (name: string, alpha: number) => `rgb(var(--${name}) / ${alpha})`;
 
 const config: Config = {
+  darkMode: "class",
   content: ["./src/**/*.{js,ts,jsx,tsx,mdx}"],
   theme: {
     extend: {
       colors: {
         // semantic tokens
-        paper: { DEFAULT: "#F4F0E7", 2: "#FAF2EC" },
-        card: "#FBF9F3",
-        cream: "#FBF9F3",
-        line: { DEFAULT: INK, soft: "#D8D1C2" },
-        rust: { DEFAULT: "#C75230", bright: "#E0532C", tint: "#F6E6DD" },
-        pos: { DEFAULT: "#2F6E4F", tint: "#E4EFE7" },
-        neg: "#C75230",
+        paper: { DEFAULT: v("paper"), 2: v("paper-2") },
+        card: v("card"),
+        cream: "#FBF9F3", // fixed: text on ink/rust slabs in both themes
+        line: { DEFAULT: v("text"), soft: v("line-soft") },
+        rust: { DEFAULT: v("rust"), bright: v("rust-bright"), tint: v("rust-tint") },
+        pos: { DEFAULT: v("pos"), tint: v("pos-tint") },
+        neg: v("rust"),
 
-        // remapped legacy surface scale (was dark ink, now warm paper)
+        // remapped legacy surface scale
         ink: {
-          DEFAULT: INK,
-          2: "rgba(28,23,20,0.65)",
-          3: "rgba(28,23,20,0.42)",
-          950: "#F4F0E7", // page background (paper)
-          900: "#FAF2EC", // raised surfaces
-          850: "#FBF9F3", // cards
-          800: "#ECE7DA", // hover surfaces / soft fills
-          700: "#D8D1C2", // subtle borders & dividers (line-soft)
-          600: INK, //        strong borders (inputs, modals)
+          DEFAULT: v("text"),
+          2: vt("text", 0.65),
+          3: vt("text", 0.42),
+          950: v("paper"), //   page background
+          900: v("paper-2"), // raised surfaces
+          850: v("card"), //    cards
+          800: v("hover"), //   hover surfaces / soft fills
+          700: v("line-soft"), // subtle borders & dividers
+          600: v("text"), //    strong borders (inputs, modals)
         },
-        // remapped accent (was ember orange on dark, now rust on light)
+        // remapped accent
         ember: {
-          DEFAULT: "#C75230",
-          hover: "#E0532C",
-          soft: "#F6E6DD",
-          text: "#C75230",
+          DEFAULT: v("rust"),
+          hover: v("rust-bright"),
+          soft: v("rust-tint"),
+          text: v("rust"),
         },
-        // remapped text scale (hierarchy preserved: lower = more prominent)
+        // remapped text scale (hierarchy preserved)
         zinc: {
-          100: INK,
-          200: INK,
-          300: "rgba(28,23,20,0.8)",
-          400: "rgba(28,23,20,0.65)", // ink-2
-          500: "rgba(28,23,20,0.42)", // ink-3
-          600: "rgba(28,23,20,0.4)",
+          100: v("text"),
+          200: v("text"),
+          300: vt("text", 0.8),
+          400: vt("text", 0.65),
+          500: vt("text", 0.45),
+          600: vt("text", 0.4),
         },
-        // status hues → design-system pos/neg (validated on card surface)
-        emerald: { 400: "#2F6E4F", 500: "#2F6E4F" },
-        red: { 300: "#E0532C", 400: "#C75230", 500: "#E0532C", 600: "#C75230" },
-        amber: { 400: "#C75230", 500: "#C75230" },
-        sky: { 400: "#3172BE", 500: "#3172BE" },
+        // status hues → pos/neg (chart + badge palettes validated per theme)
+        emerald: { 400: v("pos"), 500: v("pos") },
+        red: { 300: v("rust-bright"), 400: v("rust"), 500: v("rust-bright"), 600: v("rust") },
+        amber: { 400: v("rust"), 500: v("rust") },
+        sky: { 400: v("info"), 500: v("info") },
       },
       fontFamily: {
         sans: ["Inter", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Roboto", "sans-serif"],
@@ -71,11 +77,11 @@ const config: Config = {
       },
       boxShadow: {
         // hard paper-cut shadows — no blur, ever
-        card: `6px 6px 0 ${INK}`,
-        pop: `6px 6px 0 ${INK}`,
-        hard: `6px 6px 0 ${INK}`,
-        "hard-sm": `4px 4px 0 ${INK}`,
-        focus: `0 0 0 3px #F6E6DD, 4px 4px 0 ${INK}`,
+        card: "6px 6px 0 rgb(var(--shadow))",
+        pop: "6px 6px 0 rgb(var(--shadow))",
+        hard: "6px 6px 0 rgb(var(--shadow))",
+        "hard-sm": "4px 4px 0 rgb(var(--shadow))",
+        focus: "0 0 0 3px rgb(var(--rust-tint)), 4px 4px 0 rgb(var(--shadow))",
       },
       borderWidth: {
         DEFAULT: "1px",

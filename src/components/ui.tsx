@@ -47,7 +47,8 @@ export function Card({
           {action}
         </header>
       )}
-      <div className={padded ? "p-5" : ""}>{children}</div>
+      {/* unpadded cards hold tables — let them scroll sideways on phones */}
+      <div className={padded ? "p-5" : "overflow-x-auto"}>{children}</div>
     </section>
   );
 }
@@ -89,11 +90,11 @@ const badgeStyles: Record<string, string> = {
   error: "bg-rust-tint text-rust",
   unhealthy: "bg-rust-tint text-rust",
   ADMIN: "bg-rust-tint text-rust",
-  DRAFT: "bg-[#ECE7DA] text-ink-2",
-  COMPLETED: "bg-[#ECE7DA] text-ink-2",
-  AFFILIATE: "bg-[#ECE7DA] text-ink-2",
-  unconfigured: "bg-[#ECE7DA] text-ink-2",
-  unchecked: "bg-[#ECE7DA] text-ink-2",
+  DRAFT: "bg-ink-800 text-ink-2",
+  COMPLETED: "bg-ink-800 text-ink-2",
+  AFFILIATE: "bg-ink-800 text-ink-2",
+  unconfigured: "bg-ink-800 text-ink-2",
+  unchecked: "bg-ink-800 text-ink-2",
 };
 
 export function Badge({ value }: { value: string }) {

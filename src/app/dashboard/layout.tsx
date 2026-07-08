@@ -31,7 +31,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         roleLabel={session.user.role === "ADMIN" ? "Admin (viewing affiliate area)" : "Affiliate"}
         appName={appName}
       />
-      <main className="ml-60 px-8 py-8">
+      <main className="px-4 pb-8 pt-20 sm:px-8 lg:ml-60 lg:pt-8">
         <div className="mx-auto max-w-6xl">{children}</div>
       </main>
     </div>

@@ -63,7 +63,7 @@ export default async function AdminSettingsPage() {
                 NEXT_PUBLIC_APP_URL from the environment.
               </p>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-zinc-400">
                   Leaderboard size

@@ -22,7 +22,7 @@ export function ToggleSwitch({
         aria-checked={checked}
         aria-label={label}
         className={`relative h-6 w-11 rounded-full border-brutal border-line transition-colors ${
-          checked ? "bg-pos" : "bg-[#ECE7DA]"
+          checked ? "bg-pos" : "bg-ink-800"
         }`}
       >
         <span

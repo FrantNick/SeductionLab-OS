@@ -15,38 +15,70 @@ import {
   YAxis,
 } from "recharts";
 
+import { useTheme } from "@/components/theme";
+
 /**
- * Chart tokens — warm editorial palette, validated with the dataviz
- * palette checker against the card surface #FBF9F3 (lightness band,
- * chroma floor, CVD ΔE, contrast all PASS). Slot order is fixed; series
- * are assigned in sequence. Rust leads; ink draws the baseline; the grid
- * stays recessive in line-soft.
+ * Chart tokens per theme — both series palettes validated with the
+ * dataviz palette checker against their card surface (#FBF9F3 light,
+ * #211B16 dark): lightness band, chroma floor, CVD ΔE and contrast all
+ * PASS. Slot order is fixed; series are assigned in sequence. Rust
+ * leads; the ink of the theme draws the baseline; the grid stays
+ * recessive in line-soft.
  */
-const SERIES = ["#C75230", "#3172BE", "#1F8A55", "#8A4FA8"];
-const GRID = "#D8D1C2";
-const AXIS_TEXT = "#8A8075";
-const BASELINE = "#1C1714";
-const SURFACE = "#FBF9F3";
-
-const axisProps = {
-  stroke: BASELINE,
-  tick: { fill: AXIS_TEXT, fontSize: 11, fontFamily: "'JetBrains Mono', monospace" },
-  tickLine: false as const,
-  axisLine: { stroke: BASELINE, strokeWidth: 1.5 },
-};
-
-const tooltipStyle = {
-  contentStyle: {
-    background: "#FBF9F3",
-    border: "1.75px solid #1C1714",
-    borderRadius: 8,
-    fontSize: 12,
-    color: "#1C1714",
-    boxShadow: "4px 4px 0 #1C1714",
+const THEMES = {
+  light: {
+    series: ["#C75230", "#3172BE", "#1F8A55", "#8A4FA8"],
+    grid: "#D8D1C2",
+    axisText: "#8A8075",
+    baseline: "#1C1714",
+    surface: "#FBF9F3",
+    tooltipBg: "#FBF9F3",
+    tooltipText: "#1C1714",
+    cursorFill: "#F6E6DD",
+    legendText: "#4A423B",
   },
-  labelStyle: { color: "#8A8075", fontSize: 11 },
-  cursor: { stroke: "#1C1714", strokeWidth: 1 },
-};
+  dark: {
+    series: ["#E0532C", "#5B96D6", "#3FA976", "#A97BC8"],
+    grid: "#42382F",
+    axisText: "#9C9186",
+    baseline: "#F4F0E7",
+    surface: "#211B16",
+    tooltipBg: "#211B16",
+    tooltipText: "#F4F0E7",
+    cursorFill: "#3C221A",
+    legendText: "#C9C2B4",
+  },
+} as const;
+
+function useChartTokens() {
+  const { dark } = useTheme();
+  const t = dark ? THEMES.dark : THEMES.light;
+  return {
+    SERIES: t.series,
+    GRID: t.grid,
+    SURFACE: t.surface,
+    legendText: t.legendText,
+    axisProps: {
+      stroke: t.baseline,
+      tick: { fill: t.axisText, fontSize: 11, fontFamily: "'JetBrains Mono', monospace" },
+      tickLine: false as const,
+      axisLine: { stroke: t.baseline, strokeWidth: 1.5 },
+    },
+    tooltipStyle: {
+      contentStyle: {
+        background: t.tooltipBg,
+        border: `1.75px solid ${t.baseline}`,
+        borderRadius: 8,
+        fontSize: 12,
+        color: t.tooltipText,
+        boxShadow: dark ? "4px 4px 0 #080605" : "4px 4px 0 #1C1714",
+      },
+      labelStyle: { color: t.axisText, fontSize: 11 },
+      cursor: { stroke: t.baseline, strokeWidth: 1 },
+    },
+    cursorFill: t.cursorFill,
+  };
+}
 
 function compact(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -65,6 +97,8 @@ export function TimeSeriesChart({
   data: { date: string; value: number }[];
   format?: "number" | "money";
 }) {
+  const { SERIES, GRID, SURFACE, axisProps, tooltipStyle, cursorFill, legendText } = useChartTokens();
+
   const fmt = (v: number) => (format === "money" ? `$${compact(v)}` : compact(v));
   return (
     <div className="h-56 w-full">
@@ -98,6 +132,8 @@ export function TimeSeriesChart({
 
 /** Single-series clicks-over-time. One series → no legend; title names it. */
 export function ClicksAreaChart({ data }: { data: { date: string; clicks: number }[] }) {
+  const { SERIES, GRID, SURFACE, axisProps, tooltipStyle, cursorFill, legendText } = useChartTokens();
+
   return (
     <div className="h-64 w-full">
       <ResponsiveContainer width="100%" height="100%">
@@ -139,6 +175,8 @@ export function CategoryBarChart({
   data: { name: string; value: number }[];
   format?: "number" | "percent" | "money";
 }) {
+  const { SERIES, GRID, SURFACE, axisProps, tooltipStyle, cursorFill, legendText } = useChartTokens();
+
   const fmt = (v: number) =>
     format === "percent"
       ? `${(v * 100).toFixed(2)}%`
@@ -153,7 +191,7 @@ export function CategoryBarChart({
           <CartesianGrid stroke={GRID} strokeWidth={1} vertical={false} />
           <XAxis dataKey="name" {...axisProps} interval={0} minTickGap={8} />
           <YAxis {...axisProps} tickFormatter={fmt} width={56} />
-          <Tooltip {...tooltipStyle} formatter={(v) => fmt(Number(v))} cursor={{ fill: "#F6E6DD" }} />
+          <Tooltip {...tooltipStyle} formatter={(v) => fmt(Number(v))} cursor={{ fill: cursorFill }} />
           <Bar dataKey="value" fill={SERIES[0]} maxBarSize={24} radius={[4, 4, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
@@ -163,6 +201,8 @@ export function CategoryBarChart({
 
 /** Single-series views-over-time for a thread's metric snapshots. */
 export function ViewsLineChart({ data }: { data: { label: string; views: number }[] }) {
+  const { SERIES, GRID, SURFACE, axisProps, tooltipStyle, cursorFill, legendText } = useChartTokens();
+
   return (
     <div className="h-64 w-full">
       <ResponsiveContainer width="100%" height="100%">
@@ -200,6 +240,8 @@ export function EngagementLineChart({
 }: {
   data: { label: string; likes: number; replies: number; retweets: number; quotes: number }[];
 }) {
+  const { SERIES, GRID, SURFACE, axisProps, tooltipStyle, cursorFill, legendText } = useChartTokens();
+
   return (
     <div className="h-72 w-full">
       <ResponsiveContainer width="100%" height="100%">
@@ -212,7 +254,7 @@ export function EngagementLineChart({
             wrapperStyle={{ fontSize: 12 }}
             iconType="plainline"
             iconSize={12}
-            formatter={(value: string) => <span style={{ color: "#4A423B" }}>{value}</span>}
+            formatter={(value: string) => <span style={{ color: legendText }}>{value}</span>}
           />
           {ENGAGEMENT_KEYS.map((s, i) => (
             <Line

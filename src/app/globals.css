@@ -5,10 +5,43 @@
 @tailwind utilities;
 
 /* Warm editorial brutalist: paper backgrounds, ink text, rust accents,
-   hard paper-cut shadows. No gradients, no blurs, no glass. */
+   hard paper-cut shadows. No gradients, no blurs, no glass.
+   Tokens are RGB triples consumed by tailwind.config.ts — `:root` is the
+   light theme, `.dark` the runtime dark variant (toggled from the sidebar,
+   persisted in localStorage, applied pre-hydration in the root layout). */
 
 :root {
   color-scheme: light;
+  --paper: 244 240 231; /* #F4F0E7 page background */
+  --paper-2: 250 242 236; /* #FAF2EC raised surfaces */
+  --card: 251 249 243; /* #FBF9F3 cards */
+  --hover: 236 231 218; /* #ECE7DA hover fills / neutral badges */
+  --text: 28 23 20; /* #1C1714 warm near-black ink */
+  --line-soft: 216 209 194; /* #D8D1C2 subtle dividers */
+  --rust: 199 82 48; /* #C75230 */
+  --rust-bright: 224 83 44; /* #E0532C */
+  --rust-tint: 246 230 221; /* #F6E6DD */
+  --pos: 47 110 79; /* #2F6E4F */
+  --pos-tint: 228 239 231; /* #E4EFE7 */
+  --info: 49 114 190; /* #3172BE */
+  --shadow: 28 23 20; /* hard shadows are cast in ink */
+}
+
+.dark {
+  color-scheme: dark;
+  --paper: 22 18 15; /* warm near-black paper */
+  --paper-2: 30 24 20;
+  --card: 33 27 22;
+  --hover: 45 36 29;
+  --text: 244 240 231; /* the ink becomes warm off-white */
+  --line-soft: 66 56 47;
+  --rust: 214 94 58; /* slightly brighter for dark contrast */
+  --rust-bright: 232 116 76;
+  --rust-tint: 60 34 26;
+  --pos: 82 160 120;
+  --pos-tint: 26 46 37;
+  --info: 108 160 214;
+  --shadow: 8 6 5; /* near-black cut shadow on dark paper */
 }
 
 body {
@@ -16,131 +49,140 @@ body {
 }
 
 ::selection {
-  background: #c75230;
+  background: rgb(var(--rust));
   color: #fff;
 }
 
 /* --- shared primitives ------------------------------------------------ */
 
 @layer components {
+  .card {
+    background: rgb(var(--card));
+    border: 1.75px solid rgb(var(--text));
+    border-radius: 8px;
+    box-shadow: 6px 6px 0 rgb(var(--shadow));
+  }
 
-.card {
-  background: #fbf9f3;
-  border: 1.75px solid #1c1714;
-  border-radius: 8px;
-  box-shadow: 6px 6px 0 #1c1714;
-}
+  .input {
+    @apply w-full px-3 py-2 text-sm text-ink placeholder:text-ink-3 outline-none;
+    background: rgb(var(--paper-2));
+    border: 1.75px solid rgb(var(--text));
+    border-radius: 8px;
+    transition:
+      border-color 0.12s,
+      box-shadow 0.12s;
+  }
 
-.input {
-  @apply w-full bg-white px-3 py-2 text-sm text-ink placeholder:text-ink-3 outline-none;
-  border: 1.75px solid #1c1714;
-  border-radius: 8px;
-  transition:
-    border-color 0.12s,
-    box-shadow 0.12s;
-}
+  :root:not(.dark) .input {
+    background: #fff;
+  }
 
-.input:focus {
-  border-color: #c75230;
-  box-shadow: 0 0 0 3px #f6e6dd;
-}
+  .input:focus {
+    border-color: rgb(var(--rust));
+    box-shadow: 0 0 0 3px rgb(var(--rust-tint));
+  }
 
-.btn-primary {
-  @apply inline-flex items-center justify-center gap-2 bg-ink px-4 py-2 text-sm text-cream
-    disabled:cursor-not-allowed disabled:opacity-50;
-  font-family: Archivo, Inter, sans-serif;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  border: 1.75px solid #1c1714;
-  border-radius: 4px;
-  box-shadow: 4px 4px 0 rgba(28, 23, 20, 0.28);
-  transition:
-    transform 0.12s cubic-bezier(0.2, 0.7, 0.2, 1),
-    box-shadow 0.12s;
-}
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 bg-ink px-4 py-2 text-sm text-paper
+      disabled:cursor-not-allowed disabled:opacity-50;
+    font-family: Archivo, Inter, sans-serif;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    border: 1.75px solid rgb(var(--text));
+    border-radius: 4px;
+    box-shadow: 4px 4px 0 rgb(var(--text) / 0.28);
+    transition:
+      transform 0.12s cubic-bezier(0.2, 0.7, 0.2, 1),
+      box-shadow 0.12s;
+  }
 
-.btn-primary:hover:not(:disabled) {
-  transform: translate(2px, 2px);
-  box-shadow: 1px 1px 0 rgba(28, 23, 20, 0.28);
-}
+  .btn-primary:hover:not(:disabled) {
+    transform: translate(2px, 2px);
+    box-shadow: 1px 1px 0 rgb(var(--text) / 0.28);
+  }
 
-.btn-secondary {
-  @apply inline-flex items-center justify-center gap-2 bg-card px-4 py-2 text-sm text-ink
-    disabled:cursor-not-allowed disabled:opacity-50;
-  font-family: Archivo, Inter, sans-serif;
-  font-weight: 600;
-  border: 1.75px solid #1c1714;
-  border-radius: 4px;
-  box-shadow: 4px 4px 0 #1c1714;
-  transition:
-    transform 0.12s cubic-bezier(0.2, 0.7, 0.2, 1),
-    box-shadow 0.12s,
-    background 0.12s;
-}
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 bg-card px-4 py-2 text-sm text-ink
+      disabled:cursor-not-allowed disabled:opacity-50;
+    font-family: Archivo, Inter, sans-serif;
+    font-weight: 600;
+    border: 1.75px solid rgb(var(--text));
+    border-radius: 4px;
+    box-shadow: 4px 4px 0 rgb(var(--shadow));
+    transition:
+      transform 0.12s cubic-bezier(0.2, 0.7, 0.2, 1),
+      box-shadow 0.12s,
+      background 0.12s;
+  }
 
-.btn-secondary:hover:not(:disabled) {
-  background: #faf2ec;
-  transform: translate(2px, 2px);
-  box-shadow: 2px 2px 0 #1c1714;
-}
+  .btn-secondary:hover:not(:disabled) {
+    background: rgb(var(--paper-2));
+    transform: translate(2px, 2px);
+    box-shadow: 2px 2px 0 rgb(var(--shadow));
+  }
 
-.btn-ghost {
-  @apply inline-flex items-center justify-center gap-1 rounded px-2 py-1 text-xs
-    font-semibold text-ink-2 transition-colors hover:text-ink;
-  font-family: Archivo, Inter, sans-serif;
-}
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-1 rounded px-2 py-1 text-xs
+      font-semibold text-ink-2 transition-colors hover:text-ink;
+    font-family: Archivo, Inter, sans-serif;
+  }
 
-.btn-ghost:hover {
-  background: rgba(28, 23, 20, 0.05);
-}
+  .btn-ghost:hover {
+    background: rgb(var(--text) / 0.05);
+  }
 
-.table-base {
-  @apply w-full text-sm;
-}
+  .table-base {
+    @apply w-full text-sm;
+  }
 
-.table-base thead th {
-  @apply px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-ink-2;
-  font-family: Archivo, Inter, sans-serif;
-  letter-spacing: 0.08em;
-  background: #faf2ec;
-  border-bottom: 1.75px solid #1c1714;
-}
+  /* phones: tables keep their columns and scroll sideways inside cards */
+  @media (max-width: 767px) {
+    .table-base {
+      min-width: 640px;
+    }
+  }
 
-.table-base tbody td {
-  @apply px-4 py-3 text-ink;
-  border-bottom: 1px solid #d8d1c2;
-}
+  .table-base thead th {
+    @apply px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-ink-2;
+    font-family: Archivo, Inter, sans-serif;
+    letter-spacing: 0.08em;
+    background: rgb(var(--paper-2));
+    border-bottom: 1.75px solid rgb(var(--text));
+  }
 
-.table-base tbody tr:last-child td {
-  border-bottom: none;
-}
+  .table-base tbody td {
+    @apply px-4 py-3 text-ink;
+    border-bottom: 1px solid rgb(var(--line-soft));
+  }
 
-.table-base tbody tr {
-  transition: background 0.12s;
-}
+  .table-base tbody tr:last-child td {
+    border-bottom: none;
+  }
 
-.table-base tbody tr:hover {
-  background: #faf2ec;
-}
+  .table-base tbody tr {
+    transition: background 0.12s;
+  }
 
-/* numbers, slugs and codes read in mono */
-.num {
-  font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-variant-numeric: tabular-nums;
-  font-size: 0.95em;
-}
+  .table-base tbody tr:hover {
+    background: rgb(var(--paper-2));
+  }
 
-code {
-  font-family: "JetBrains Mono", ui-monospace, monospace;
-}
+  /* numbers, slugs and codes read in mono */
+  .num {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 0.95em;
+  }
 
-/* form controls pick up the warm scheme */
-select.input {
-  cursor: pointer;
-}
+  code {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+  }
 
-input[type="checkbox"] {
-  accent-color: #c75230;
-}
+  select.input {
+    cursor: pointer;
+  }
 
+  input[type="checkbox"] {
+    accent-color: rgb(var(--rust));
+  }
 }

@@ -273,6 +273,7 @@ export function TrackingLinksManager({
           </p>
         ) : (
           <>
+            <div className="overflow-x-auto">
             <table className="table-base">
               <thead>
                 <tr>
@@ -352,6 +353,7 @@ export function TrackingLinksManager({
                 })}
               </tbody>
             </table>
+            </div>
             {pages > 1 && (
               <div className="flex items-center justify-between border-t border-ink-800 px-5 py-2.5">
                 <span className="text-[11px] text-zinc-500">
