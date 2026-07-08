@@ -78,7 +78,7 @@ export default async function AffiliateCampaignsPage() {
               <Card key={campaign.id} className="flex flex-col">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h3 className="text-base font-semibold text-white">{campaign.name}</h3>
+                    <h3 className="font-heading text-base font-bold text-ink">{campaign.name}</h3>
                     <p className="mt-0.5 text-xs text-zinc-500">
                       {campaign.product.name} · {formatMoney(Number(campaign.product.price))} ·{" "}
                       {formatDate(campaign.startDate)} → {formatDate(campaign.endDate)}
@@ -90,19 +90,19 @@ export default async function AffiliateCampaignsPage() {
                 {/* Your numbers in this campaign */}
                 <div className="mt-4 grid grid-cols-4 gap-2 rounded-lg border border-ink-700 bg-ink-900 px-3 py-2.5 text-center">
                   <div>
-                    <p className="num text-sm font-semibold text-white">{formatNumber(tv.views)}</p>
+                    <p className="num text-sm font-semibold text-ink">{formatNumber(tv.views)}</p>
                     <p className="text-[10px] uppercase tracking-wider text-zinc-500">Views</p>
                   </div>
                   <div>
-                    <p className="num text-sm font-semibold text-white">{formatNumber(clicks)}</p>
+                    <p className="num text-sm font-semibold text-ink">{formatNumber(clicks)}</p>
                     <p className="text-[10px] uppercase tracking-wider text-zinc-500">Clicks</p>
                   </div>
                   <div>
-                    <p className="num text-sm font-semibold text-white">{formatPercent(ctr)}</p>
+                    <p className="num text-sm font-semibold text-ink">{formatPercent(ctr)}</p>
                     <p className="text-[10px] uppercase tracking-wider text-zinc-500">CTR</p>
                   </div>
                   <div>
-                    <p className="num text-sm font-semibold text-white">{formatMoney(revenue)}</p>
+                    <p className="num text-sm font-semibold text-ink">{formatMoney(revenue)}</p>
                     <p className="text-[10px] uppercase tracking-wider text-zinc-500">Revenue</p>
                   </div>
                 </div>

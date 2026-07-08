@@ -48,7 +48,7 @@ export function ConfirmAction({
 
       {open && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4"
           onClick={(e) => {
             if (e.target === e.currentTarget) setOpen(false);
           }}
@@ -61,11 +61,11 @@ export function ConfirmAction({
             role="dialog"
             aria-modal="true"
             aria-label={title}
-            className="w-full max-w-sm rounded-xl border border-ink-600 bg-ink-850 p-5 shadow-pop"
+            className="card w-full max-w-sm p-5"
           >
-            <h3 className="text-base font-semibold text-white">{title}</h3>
-            {description && <p className="mt-2 text-sm text-zinc-400">{description}</p>}
-            <div className="mt-5 flex justify-end gap-2">
+            <h3 className="font-heading text-base font-bold text-ink">{title}</h3>
+            {description && <p className="mt-2 text-sm text-ink-2">{description}</p>}
+            <div className="mt-5 flex justify-end gap-3">
               <button
                 type="button"
                 className="btn-secondary"
@@ -81,7 +81,7 @@ export function ConfirmAction({
                 disabled={pending}
                 className={
                   destructive
-                    ? "inline-flex items-center justify-center rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-500 disabled:opacity-50"
+                    ? "inline-flex items-center justify-center gap-2 rounded-brutal border-brutal border-line bg-rust px-4 py-2 font-heading text-sm font-bold text-white shadow-hard-sm transition-all hover:translate-x-0.5 hover:translate-y-0.5 hover:bg-rust-bright hover:shadow-none disabled:opacity-50"
                     : "btn-primary"
                 }
               >

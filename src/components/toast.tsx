@@ -29,11 +29,12 @@ export function useToast() {
   return ctx;
 }
 
-const KIND_STYLES: Record<ToastKind, { bar: string; icon: string }> = {
-  success: { bar: "bg-emerald-500", icon: "✓" },
-  warning: { bar: "bg-amber-500", icon: "!" },
-  error: { bar: "bg-red-500", icon: "✕" },
-  info: { bar: "bg-sky-500", icon: "i" },
+// solid brutalist toasts: colored slab, white text, hard shadow
+const KIND_STYLES: Record<ToastKind, { surface: string; icon: string }> = {
+  success: { surface: "bg-pos", icon: "✓" },
+  warning: { surface: "bg-rust", icon: "!" },
+  error: { surface: "bg-rust", icon: "✕" },
+  info: { surface: "bg-ink", icon: "i" },
 };
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
@@ -69,17 +70,19 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             <div
               key={t.id}
               role="status"
-              className="pointer-events-auto flex overflow-hidden rounded-lg border border-ink-600 bg-ink-800 shadow-pop"
+              className={`pointer-events-auto flex overflow-hidden rounded-brutal-lg border-brutal border-line shadow-hard-sm ${style.surface}`}
             >
-              <div className={`w-1 shrink-0 ${style.bar}`} />
+              <span className="flex w-9 shrink-0 items-center justify-center border-r border-white/25 font-mono text-sm font-bold text-white">
+                {style.icon}
+              </span>
               <div className="flex-1 px-3 py-2.5">
-                <p className="text-sm font-medium text-zinc-100">{t.title}</p>
-                {t.description && <p className="mt-0.5 text-xs text-zinc-400">{t.description}</p>}
+                <p className="font-heading text-sm font-bold text-white">{t.title}</p>
+                {t.description && <p className="mt-0.5 text-xs text-white/85">{t.description}</p>}
               </div>
               <button
                 onClick={() => dismiss(t.id)}
                 aria-label="Dismiss notification"
-                className="px-3 text-zinc-500 transition-colors hover:text-zinc-200"
+                className="px-3 text-white/70 transition-colors hover:text-white"
               >
                 ✕
               </button>

@@ -78,7 +78,7 @@ export default async function AdminOverviewPage() {
                       </p>
                     </div>
                   </div>
-                  <span className="num text-sm font-semibold text-white">
+                  <span className="num text-sm font-semibold text-ink">
                     {formatMoney(row.revenue)}
                   </span>
                 </li>

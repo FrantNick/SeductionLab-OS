@@ -16,33 +16,36 @@ import {
 } from "recharts";
 
 /**
- * Chart tokens — validated with the dataviz palette checker against the
- * dark card surface #17171A (lightness band, chroma floor, CVD ΔE, contrast
- * all PASS). Slot order is fixed; series are assigned in sequence.
+ * Chart tokens — warm editorial palette, validated with the dataviz
+ * palette checker against the card surface #FBF9F3 (lightness band,
+ * chroma floor, CVD ΔE, contrast all PASS). Slot order is fixed; series
+ * are assigned in sequence. Rust leads; ink draws the baseline; the grid
+ * stays recessive in line-soft.
  */
-const SERIES = ["#d95926", "#3987e5", "#199e70", "#9085e9"];
-const GRID = "#2c2c2a";
-const AXIS_TEXT = "#898781";
-const BASELINE = "#383835";
-const SURFACE = "#17171A";
+const SERIES = ["#C75230", "#3172BE", "#1F8A55", "#8A4FA8"];
+const GRID = "#D8D1C2";
+const AXIS_TEXT = "#8A8075";
+const BASELINE = "#1C1714";
+const SURFACE = "#FBF9F3";
 
 const axisProps = {
   stroke: BASELINE,
-  tick: { fill: AXIS_TEXT, fontSize: 11 },
+  tick: { fill: AXIS_TEXT, fontSize: 11, fontFamily: "'JetBrains Mono', monospace" },
   tickLine: false as const,
-  axisLine: { stroke: BASELINE },
+  axisLine: { stroke: BASELINE, strokeWidth: 1.5 },
 };
 
 const tooltipStyle = {
   contentStyle: {
-    background: "#1E1E22",
-    border: "1px solid #3A3A42",
+    background: "#FBF9F3",
+    border: "1.75px solid #1C1714",
     borderRadius: 8,
     fontSize: 12,
-    color: "#e4e4e7",
+    color: "#1C1714",
+    boxShadow: "4px 4px 0 #1C1714",
   },
-  labelStyle: { color: "#a1a1aa", fontSize: 11 },
-  cursor: { stroke: BASELINE, strokeWidth: 1 },
+  labelStyle: { color: "#8A8075", fontSize: 11 },
+  cursor: { stroke: "#1C1714", strokeWidth: 1 },
 };
 
 function compact(n: number): string {
@@ -150,7 +153,7 @@ export function CategoryBarChart({
           <CartesianGrid stroke={GRID} strokeWidth={1} vertical={false} />
           <XAxis dataKey="name" {...axisProps} interval={0} minTickGap={8} />
           <YAxis {...axisProps} tickFormatter={fmt} width={56} />
-          <Tooltip {...tooltipStyle} formatter={(v) => fmt(Number(v))} cursor={{ fill: "#1E1E22" }} />
+          <Tooltip {...tooltipStyle} formatter={(v) => fmt(Number(v))} cursor={{ fill: "#F6E6DD" }} />
           <Bar dataKey="value" fill={SERIES[0]} maxBarSize={24} radius={[4, 4, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
@@ -209,7 +212,7 @@ export function EngagementLineChart({
             wrapperStyle={{ fontSize: 12 }}
             iconType="plainline"
             iconSize={12}
-            formatter={(value: string) => <span style={{ color: "#c3c2b7" }}>{value}</span>}
+            formatter={(value: string) => <span style={{ color: "#4A423B" }}>{value}</span>}
           />
           {ENGAGEMENT_KEYS.map((s, i) => (
             <Line

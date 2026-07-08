@@ -21,13 +21,13 @@ export function ToggleSwitch({
         role="switch"
         aria-checked={checked}
         aria-label={label}
-        className={`relative h-6 w-11 rounded-full transition-colors ${
-          checked ? "bg-ember" : "bg-ink-600"
+        className={`relative h-6 w-11 rounded-full border-brutal border-line transition-colors ${
+          checked ? "bg-pos" : "bg-[#ECE7DA]"
         }`}
       >
         <span
-          className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${
-            checked ? "left-[22px]" : "left-0.5"
+          className={`absolute top-[1.5px] h-4 w-4 rounded-full border-brutal border-line bg-white transition-all ${
+            checked ? "left-[22px]" : "left-[2px]"
           }`}
         />
       </button>

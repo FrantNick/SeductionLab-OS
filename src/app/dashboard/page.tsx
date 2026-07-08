@@ -117,7 +117,7 @@ export default async function DashboardPage() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="card px-5 py-4">
           <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">Views today</p>
-          <p className="mt-1.5 text-2xl font-semibold text-white">
+          <p className="mt-1.5 font-display text-3xl leading-none text-ink">
             {formatNumber(periods.today.views)}
           </p>
           <p className="mt-1 text-xs text-zinc-500">
@@ -126,7 +126,7 @@ export default async function DashboardPage() {
         </div>
         <div className="card px-5 py-4">
           <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">Clicks today</p>
-          <p className="mt-1.5 text-2xl font-semibold text-white">
+          <p className="mt-1.5 font-display text-3xl leading-none text-ink">
             {formatNumber(periods.today.clicks)}
           </p>
           <p className="mt-1 text-xs text-zinc-500">
@@ -135,7 +135,7 @@ export default async function DashboardPage() {
         </div>
         <div className="card px-5 py-4">
           <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">CTR today</p>
-          <p className="mt-1.5 text-2xl font-semibold text-white">
+          <p className="mt-1.5 font-display text-3xl leading-none text-ink">
             {formatPercent(periods.today.ctr)}
           </p>
           <p className="mt-1 text-xs text-zinc-500">
@@ -146,7 +146,7 @@ export default async function DashboardPage() {
           <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">
             Revenue today
           </p>
-          <p className="mt-1.5 text-2xl font-semibold text-white">
+          <p className="mt-1.5 font-display text-3xl leading-none text-ink">
             {formatMoney(periods.today.revenue)}
           </p>
           <p className="mt-1 text-xs text-zinc-500">

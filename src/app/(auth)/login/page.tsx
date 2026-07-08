@@ -37,7 +37,7 @@ function LoginForm() {
 
   return (
     <div className="card p-6">
-      <h2 className="mb-5 text-base font-semibold text-white">Sign in</h2>
+      <h2 className="mb-5 font-heading text-base font-bold text-ink">Sign in</h2>
       <form onSubmit={submit} className="space-y-4">
         <div>
           <label className="mb-1.5 block text-xs font-medium text-zinc-400">Email</label>

@@ -21,9 +21,9 @@ export function Sidebar({
   const pathname = usePathname();
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-20 flex w-60 flex-col border-r border-ink-700 bg-ink-900">
-      <div className="flex items-center gap-2.5 border-b border-ink-700 px-5 py-4">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-ember text-sm font-bold text-white">
+    <aside className="fixed inset-y-0 left-0 z-20 flex w-60 flex-col border-r-brutal border-line bg-paper">
+      <div className="flex items-center gap-3 border-b-brutal border-line px-5 py-4">
+        <div className="flex h-9 w-9 items-center justify-center rounded-brutal border-brutal border-line bg-rust font-display text-sm uppercase text-white shadow-hard-sm">
           {appName
             .split(/\s+/)
             .map((part) => part[0])
@@ -32,16 +32,18 @@ export function Sidebar({
             .toUpperCase()}
         </div>
         <div>
-          <p className="text-sm font-semibold leading-tight text-white">{appName}</p>
-          <p className="text-[11px] leading-tight text-zinc-500">OS · v2</p>
+          <p className="font-display text-base uppercase leading-tight tracking-wide text-ink">
+            {appName}
+          </p>
+          <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-ink-3">OS · v2</p>
         </div>
       </div>
 
-      <nav className="flex-1 space-y-4 overflow-y-auto px-3 py-4">
+      <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-4">
         {sections.map((section, i) => (
-          <div key={section.title ?? i} className="space-y-0.5">
+          <div key={section.title ?? i} className="space-y-1">
             {section.title && (
-              <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
+              <p className="px-3 pb-1 font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-3">
                 {section.title}
               </p>
             )}
@@ -53,10 +55,10 @@ export function Sidebar({
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`block rounded-lg px-3 py-2 text-sm transition-colors ${
+                  className={`block rounded-brutal-lg px-3 py-2 font-heading text-sm transition-colors ${
                     active
-                      ? "bg-ember-soft font-medium text-ember-text"
-                      : "text-zinc-400 hover:bg-ink-800 hover:text-zinc-200"
+                      ? "border-brutal border-line bg-rust-tint font-bold text-rust"
+                      : "border-brutal border-transparent font-medium text-ink-2 hover:bg-paper-2 hover:text-ink"
                   }`}
                 >
                   {item.label}
@@ -67,12 +69,12 @@ export function Sidebar({
         ))}
       </nav>
 
-      <div className="border-t border-ink-700 px-5 py-4">
-        <p className="truncate text-xs font-medium text-zinc-300">{userLabel}</p>
-        <p className="text-[11px] text-zinc-500">{roleLabel}</p>
+      <div className="border-t-brutal border-line px-5 py-4">
+        <p className="truncate text-xs font-semibold text-ink">{userLabel}</p>
+        <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-ink-3">{roleLabel}</p>
         <button
           onClick={() => signOut({ callbackUrl: "/login" })}
-          className="mt-3 w-full rounded-lg border border-ink-600 px-3 py-1.5 text-xs font-medium text-zinc-400 transition-colors hover:bg-ink-800 hover:text-zinc-200"
+          className="btn-secondary mt-3 w-full !py-1.5 text-xs"
         >
           Sign out
         </button>

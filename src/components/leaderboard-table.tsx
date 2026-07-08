@@ -80,7 +80,7 @@ export function LeaderboardTable({
                 <td>
                   <div className="flex items-center gap-2.5">
                     <Avatar name={row.displayName} url={row.avatarUrl} />
-                    <span className={`font-medium ${isTop3 ? "text-white" : "text-zinc-200"}`}>
+                    <span className={`${isTop3 ? "font-heading font-bold text-ink" : "font-medium text-zinc-200"}`}>
                       {row.displayName}
                     </span>
                     {highlighted && <span className="text-xs text-ember-text">you</span>}

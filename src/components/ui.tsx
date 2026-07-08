@@ -12,8 +12,10 @@ export function PageHeader({
   return (
     <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-white">{title}</h1>
-        {subtitle && <p className="mt-1 text-sm text-zinc-400">{subtitle}</p>}
+        <h1 className="font-display text-3xl uppercase leading-none tracking-wide text-ink">
+          {title}
+        </h1>
+        {subtitle && <p className="mt-2 text-sm text-ink-2">{subtitle}</p>}
       </div>
       {action}
     </div>
@@ -34,10 +36,14 @@ export function Card({
   padded?: boolean;
 }) {
   return (
-    <section className={`card ${className}`}>
+    <section className={`card overflow-hidden ${className}`}>
       {(title || action) && (
-        <header className="flex items-center justify-between border-b border-ink-700 px-5 py-3.5">
-          {title && <h2 className="text-sm font-semibold text-zinc-200">{title}</h2>}
+        <header className="flex items-center justify-between gap-3 border-b-brutal border-line px-5 py-3.5">
+          {title && (
+            <h2 className="font-heading text-sm font-bold uppercase tracking-wide text-ink">
+              {title}
+            </h2>
+          )}
           {action}
         </header>
       )}
@@ -47,9 +53,8 @@ export function Card({
 }
 
 /**
- * Stat tile: label (sentence case) + compact value in semibold sans.
- * Values use proportional figures on purpose — tabular-nums is reserved
- * for table columns and axis ticks.
+ * Stat tile: small Archivo uppercase label + big Anton number, on a
+ * bordered card with a hard shadow — like a cut-out from a magazine.
  */
 export function StatCard({
   label,
@@ -62,37 +67,40 @@ export function StatCard({
 }) {
   return (
     <div className="card px-5 py-4">
-      <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">{label}</p>
-      <p className="mt-1.5 text-2xl font-semibold text-white">{value}</p>
-      {hint && <p className="mt-1 text-xs text-zinc-500">{hint}</p>}
+      <p className="font-heading text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-2">
+        {label}
+      </p>
+      <p className="mt-1.5 font-display text-3xl uppercase leading-none text-ink">{value}</p>
+      {hint && <p className="mt-1.5 text-xs text-ink-3">{hint}</p>}
     </div>
   );
 }
 
+/** Pill badges: active = green, paused/banned = rust, draft/neutral = soft. */
 const badgeStyles: Record<string, string> = {
-  ACTIVE: "bg-emerald-500/10 text-emerald-400 ring-emerald-500/30",
-  DRAFT: "bg-zinc-500/10 text-zinc-400 ring-zinc-500/30",
-  PAUSED: "bg-amber-500/10 text-amber-400 ring-amber-500/30",
-  COMPLETED: "bg-sky-500/10 text-sky-400 ring-sky-500/30",
-  BANNED: "bg-red-500/10 text-red-400 ring-red-500/30",
-  REMOVED: "bg-red-500/10 text-red-400 ring-red-500/30",
-  ADMIN: "bg-ember-soft text-ember-text ring-ember/30",
-  AFFILIATE: "bg-zinc-500/10 text-zinc-400 ring-zinc-500/30",
-  RUNNING: "bg-emerald-500/10 text-emerald-400 ring-emerald-500/30",
-  CANCELLED: "bg-red-500/10 text-red-400 ring-red-500/30",
-  ok: "bg-emerald-500/10 text-emerald-400 ring-emerald-500/30",
-  error: "bg-red-500/10 text-red-400 ring-red-500/30",
-  unconfigured: "bg-zinc-500/10 text-zinc-400 ring-zinc-500/30",
-  healthy: "bg-emerald-500/10 text-emerald-400 ring-emerald-500/30",
-  unhealthy: "bg-red-500/10 text-red-400 ring-red-500/30",
-  unchecked: "bg-zinc-500/10 text-zinc-400 ring-zinc-500/30",
+  ACTIVE: "bg-pos-tint text-pos",
+  RUNNING: "bg-pos-tint text-pos",
+  ok: "bg-pos-tint text-pos",
+  healthy: "bg-pos-tint text-pos",
+  PAUSED: "bg-rust-tint text-rust",
+  BANNED: "bg-rust-tint text-rust",
+  REMOVED: "bg-rust-tint text-rust",
+  CANCELLED: "bg-rust-tint text-rust",
+  error: "bg-rust-tint text-rust",
+  unhealthy: "bg-rust-tint text-rust",
+  ADMIN: "bg-rust-tint text-rust",
+  DRAFT: "bg-[#ECE7DA] text-ink-2",
+  COMPLETED: "bg-[#ECE7DA] text-ink-2",
+  AFFILIATE: "bg-[#ECE7DA] text-ink-2",
+  unconfigured: "bg-[#ECE7DA] text-ink-2",
+  unchecked: "bg-[#ECE7DA] text-ink-2",
 };
 
 export function Badge({ value }: { value: string }) {
   const style = badgeStyles[value] ?? badgeStyles.DRAFT;
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${style}`}
+      className={`inline-flex items-center rounded-full border-brutal border-line px-2.5 py-0.5 font-mono text-[10.5px] font-medium uppercase tracking-[0.04em] ${style}`}
     >
       {value.toLowerCase()}
     </span>
@@ -102,8 +110,8 @@ export function Badge({ value }: { value: string }) {
 export function EmptyState({ title, hint }: { title: string; hint?: string }) {
   return (
     <div className="flex flex-col items-center justify-center px-6 py-12 text-center">
-      <p className="text-sm font-medium text-zinc-400">{title}</p>
-      {hint && <p className="mt-1 text-xs text-zinc-500">{hint}</p>}
+      <p className="font-heading text-sm font-semibold text-ink-2">{title}</p>
+      {hint && <p className="mt-1.5 max-w-md text-xs text-ink-3">{hint}</p>}
     </div>
   );
 }
@@ -131,7 +139,7 @@ export function ExternalLink({ href, children }: { href: string; children: React
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="text-ember-text underline-offset-2 hover:underline"
+      className="font-medium text-rust underline decoration-rust/40 underline-offset-2 hover:text-rust-bright hover:decoration-rust-bright"
     >
       {children}
     </a>
@@ -140,7 +148,10 @@ export function ExternalLink({ href, children }: { href: string; children: React
 
 export function InternalLink({ href, children }: { href: string; children: React.ReactNode }) {
   return (
-    <Link href={href} className="text-ember-text underline-offset-2 hover:underline">
+    <Link
+      href={href}
+      className="font-medium text-rust underline decoration-rust/40 underline-offset-2 hover:text-rust-bright hover:decoration-rust-bright"
+    >
       {children}
     </Link>
   );

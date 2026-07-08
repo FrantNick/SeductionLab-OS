@@ -40,7 +40,7 @@ export default function RegisterPage() {
 
   return (
     <div className="card p-6">
-      <h2 className="mb-1 text-base font-semibold text-white">Create affiliate account</h2>
+      <h2 className="mb-1 font-heading text-base font-bold text-ink">Create affiliate account</h2>
       <p className="mb-5 text-xs text-zinc-500">
         Join campaigns, post threads, earn on every sale you drive.
       </p>
